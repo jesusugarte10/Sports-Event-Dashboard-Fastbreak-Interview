@@ -40,6 +40,8 @@ elif [ "$1" == "ai" ]; then
     pytest test_ai_features.py -v -s
 elif [ "$1" == "integration" ]; then
     pytest test_integration.py -v -s
+elif [ "$1" == "comprehensive" ]; then
+    pytest test_comprehensive.py -v -s
 elif [ "$1" == "all" ] || [ -z "$1" ]; then
     pytest -v -s --html=reports/report.html --self-contained-html
     echo ""

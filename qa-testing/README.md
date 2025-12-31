@@ -12,10 +12,15 @@ pip install -r requirements.txt
 
 2. **Configure test environment:**
 ```bash
-# Copy the example env file
-cp .env.example .env
+# Create a .env file with your test credentials
+cat > .env << EOF
+BASE_URL=http://localhost:3000
+TEST_EMAIL=your-test-email@example.com
+TEST_PASSWORD=your-test-password
+HEADLESS=false
+EOF
 
-# Edit .env and add your test credentials
+# Edit .env and add your actual test credentials
 # You'll need to create a test user in Supabase first
 ```
 
@@ -48,18 +53,20 @@ cd qa-testing
 ./setup.sh
 ```
 
-### Running Tests with Visible Browser (Recommended for Visual Testing)
+### Running Tests with Visible Browser (Default)
 
 **By default, tests run with a visible browser so you can watch them execute!**
 
 ```bash
-# Run comprehensive test suite (recommended - covers all basic functionality)
-./run_visible_tests.sh
+# Run all tests with visible browser
+./run_tests.sh
 
-# Or run specific test suites
-./run_visible_tests.sh test_auth.py
-./run_visible_tests.sh test_dashboard.py
-./run_visible_tests.sh test_comprehensive.py
+# Run specific test suites
+./run_tests.sh auth
+./run_tests.sh dashboard
+./run_tests.sh comprehensive
+./run_tests.sh ai
+./run_tests.sh integration
 ```
 
 The browser window will open and you'll see:
@@ -73,21 +80,16 @@ The browser window will open and you'll see:
 If you want to run tests without seeing the browser:
 
 ```bash
-HEADLESS=true ./run_tests.sh comprehensive
+HEADLESS=true ./run_tests.sh
 ```
-
-This will:
-- Create a Python virtual environment
-- Install all dependencies
-- Create `.env` file from template
 
 ### Verify Setup:
 ```bash
 # Make sure your app is running first
 npm run dev
 
-# Then test Selenium setup
-pytest test_quick_check.py -v
+# Then run a quick auth test
+pytest test_auth.py -v -s
 ```
 
 ## Running Tests
@@ -139,7 +141,6 @@ HEADLESS=false pytest -v
 - ✅ Google OAuth button presence
 
 ### test_dashboard.py
-- ✅ Dashboard redirects when not authenticated
 - ✅ Dashboard elements are present (when authenticated)
 - ✅ Search functionality
 - ✅ Filter by sport
@@ -150,8 +151,10 @@ HEADLESS=false pytest -v
 ### test_ai_features.py
 - ✅ AI Event Creator button presence
 - ✅ AI Event Creator dialog opens
-- ✅ AI suggestions button in form
-- ✅ AI generate button in form
+- ✅ AI dialog has example prompts
+- ✅ AI input field accepts text
+- ✅ AI send button present
+- ✅ AI processes prompt (clicks example and verifies response)
 
 ### test_integration.py
 - ✅ Complete event lifecycle (create, view, edit, delete)
@@ -191,10 +194,11 @@ HEADLESS=false pytest -v
 - `HEADLESS`: Run in headless mode (true/false)
 
 ### Shared Fixtures (conftest.py):
-- `driver`: WebDriver instance with Chrome
+- `driver`: WebDriver instance with Chrome (session-scoped, shared across all tests)
 - `base_url`: Application base URL
-- `test_credentials`: Test user credentials
-- `authenticated_driver`: Pre-authenticated driver for protected routes
+- `test_credentials`: Test user credentials from `.env`
+- `authenticated_driver`: Pre-authenticated driver for protected routes (logs in once per session)
+- `ensure_authenticated`: Re-authenticates if session was invalidated (e.g., after sign-out test)
 
 ## Debugging
 
