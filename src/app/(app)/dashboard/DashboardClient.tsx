@@ -49,16 +49,18 @@ export function DashboardClient({
 
     // Set a new timeout to update the URL
     debounceRef.current = setTimeout(() => {
-      const params = new URLSearchParams(searchParams.toString())
-      if (searchValue) {
-        params.set('search', searchValue)
-      } else {
-        params.delete('search')
-      }
+      // Use window.location.search to get fresh params at execution time
+      // This avoids depending on searchParams which creates a new object reference on every render
+      const params = new URLSearchParams(window.location.search)
+      const currentSearch = params.get('search') || ''
       
       // Only push if the search value has actually changed from the URL
-      const currentSearch = searchParams.get('search') || ''
       if (searchValue !== currentSearch) {
+        if (searchValue) {
+          params.set('search', searchValue)
+        } else {
+          params.delete('search')
+        }
         startTransition(() => {
           router.push(`/dashboard?${params.toString()}`)
         })
@@ -70,7 +72,7 @@ export function DashboardClient({
         clearTimeout(debounceRef.current)
       }
     }
-  }, [searchValue, searchParams, router])
+  }, [searchValue, router])
 
   const handleFilterChange = (key: string, value: string, defaultValue: string) => {
     const params = new URLSearchParams(searchParams.toString())

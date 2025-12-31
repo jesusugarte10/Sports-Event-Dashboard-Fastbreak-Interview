@@ -52,14 +52,30 @@ export async function createEventWithAIAction(messages: ChatMessage[]) {
     const tomorrowDate = new Date(Date.UTC(currentYear, currentMonth, currentDay + 1))
     const tomorrowDateStr = tomorrowDate.toISOString().split('T')[0]
     
-    // Find next Saturday and Sunday for "this weekend" in UTC
+    // Calculate "this weekend" dates in UTC
+    // If today is already Saturday or Sunday, we're in the current weekend
     const utcDayOfWeek = now.getUTCDay()
-    const daysUntilSaturday = (6 - utcDayOfWeek + 7) % 7 || 7
-    const nextSaturdayDate = new Date(Date.UTC(currentYear, currentMonth, currentDay + daysUntilSaturday))
-    const nextSaturdayDateStr = nextSaturdayDate.toISOString().split('T')[0]
+    let thisWeekendSaturdayStr: string
+    let thisWeekendSundayStr: string
     
-    const nextSundayDate = new Date(Date.UTC(currentYear, currentMonth, currentDay + daysUntilSaturday + 1))
-    const nextSundayDateStr = nextSundayDate.toISOString().split('T')[0]
+    if (utcDayOfWeek === 6) {
+      // Today is Saturday - "this Saturday" = today, "this Sunday" = tomorrow
+      thisWeekendSaturdayStr = currentDate
+      const sundayDate = new Date(Date.UTC(currentYear, currentMonth, currentDay + 1))
+      thisWeekendSundayStr = sundayDate.toISOString().split('T')[0]
+    } else if (utcDayOfWeek === 0) {
+      // Today is Sunday - "this Saturday" = yesterday, "this Sunday" = today
+      const saturdayDate = new Date(Date.UTC(currentYear, currentMonth, currentDay - 1))
+      thisWeekendSaturdayStr = saturdayDate.toISOString().split('T')[0]
+      thisWeekendSundayStr = currentDate
+    } else {
+      // Weekday (Mon-Fri) - calculate the upcoming weekend
+      const daysUntilSaturday = 6 - utcDayOfWeek
+      const saturdayDate = new Date(Date.UTC(currentYear, currentMonth, currentDay + daysUntilSaturday))
+      thisWeekendSaturdayStr = saturdayDate.toISOString().split('T')[0]
+      const sundayDate = new Date(Date.UTC(currentYear, currentMonth, currentDay + daysUntilSaturday + 1))
+      thisWeekendSundayStr = sundayDate.toISOString().split('T')[0]
+    }
 
     // Build conversation with system context
     const systemContext = `You are an AI assistant EXCLUSIVELY for creating SPORTS EVENTS. Your ONLY purpose is to help users create sports events. If users ask about anything NOT related to sports events, politely redirect them. Available sports: Basketball, Football, Soccer, Baseball, Tennis, Volleyball, Hockey, Pickleball, Other.`
@@ -75,8 +91,8 @@ CRITICAL DATE INFORMATION - USE THESE EXACT VALUES:
 - TODAY'S DATE: ${currentDate} (${dayOfWeek})
 - CURRENT YEAR: ${currentYear}
 - TOMORROW: ${tomorrowDateStr}
-- THIS WEEKEND (Saturday): ${nextSaturdayDateStr}
-- THIS WEEKEND (Sunday): ${nextSundayDateStr}
+- THIS WEEKEND (Saturday): ${thisWeekendSaturdayStr}
+- THIS WEEKEND (Sunday): ${thisWeekendSundayStr}
 
 IMPORTANT RULES:
 - ONLY respond to requests about creating SPORTS EVENTS
@@ -94,8 +110,8 @@ Based on the conversation below, extract event details and respond in TWO parts:
 DATE/TIME CONVERSION RULES - FOLLOW EXACTLY:
 - "today" → ${currentDate}
 - "tomorrow" → ${tomorrowDateStr}
-- "this weekend" or "this Saturday" → ${nextSaturdayDateStr}
-- "this Sunday" → ${nextSundayDateStr}
+- "this weekend" or "this Saturday" → ${thisWeekendSaturdayStr}
+- "this Sunday" → ${thisWeekendSundayStr}
 - "next week" = add 7 days to today: calculate from ${currentDate}
 - "next Monday/Tuesday/etc" = find the next occurrence of that day from ${currentDate}
 - Time conversion: "2 PM" or "2pm" or "2:00 PM" → 14:00:00
