@@ -44,7 +44,7 @@ export function EventCard({ id, name, sport, startsAt, description, location, ve
   }, [startsAt])
   
   return (
-    <Card className="group hover:shadow-xl hover:shadow-primary/10 transition-all duration-300 border-primary/10 hover:border-primary/30 bg-gradient-to-br from-card to-card/50">
+    <Card className="group hover:shadow-xl hover:shadow-primary/10 transition-all duration-300 border-primary/10 hover:border-primary/30 bg-gradient-to-br from-card to-card/50 flex flex-col h-full">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-2 flex-1 min-w-0">
@@ -64,7 +64,7 @@ export function EventCard({ id, name, sport, startsAt, description, location, ve
           </Badge>
         </div>
       </CardHeader>
-      <CardContent className="space-y-3 pb-3">
+      <CardContent className="space-y-3 pb-0 flex-1">
         {description && (
           <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed">
             {description}
@@ -93,7 +93,7 @@ export function EventCard({ id, name, sport, startsAt, description, location, ve
           </div>
         )}
       </CardContent>
-      <CardFooter className="flex gap-2 pt-4 border-t border-primary/10">
+      <CardFooter className="flex gap-2 pt-3 mt-auto border-t border-primary/10">
         <Button 
           asChild 
           variant="outline" 

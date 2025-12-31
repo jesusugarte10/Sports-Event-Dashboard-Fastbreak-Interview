@@ -16,9 +16,12 @@ env_path = Path(__file__).parent / '.env'
 load_dotenv(env_path)
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def driver():
-    """Setup and teardown driver for each test"""
+    """
+    Setup and teardown driver for the entire test session
+    This keeps the browser open for all tests, allowing session persistence
+    """
     options = Options()
     
     # Check if we should run in headless mode (default: False - show browser for visual testing)
@@ -70,65 +73,130 @@ def driver():
     
     yield driver
     
+    # Only quit at the end of the entire test session
     driver.quit()
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def base_url():
-    """Base URL for the application"""
+    """Base URL for the application - session scoped for reuse"""
     return os.getenv("BASE_URL", "http://localhost:3000")
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def test_credentials():
-    """Test user credentials from environment variables"""
+    """Test user credentials from environment variables - session scoped for reuse"""
     return {
         "email": os.getenv("TEST_EMAIL", "test@example.com"),
         "password": os.getenv("TEST_PASSWORD", "testpassword123"),
     }
 
 
-@pytest.fixture
-def authenticated_driver(driver, base_url, test_credentials):
-    """
-    Create an authenticated session by signing in
-    Returns the driver with an active session
-    """
-    driver.get(f"{base_url}/login")
-    
-    # Wait for login page to load
+def _perform_login(driver, base_url, test_credentials):
+    """Helper function to perform login"""
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
     
+    driver.get(f"{base_url}/login")
+    
+    # Wait for login page to load
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.NAME, "email"))
+    )
+    
+    # Fill in email
+    email_input = driver.find_element(By.NAME, "email")
+    email_input.clear()
+    email_input.send_keys(test_credentials["email"])
+    time.sleep(0.5)
+    
+    # Fill in password
+    password_input = driver.find_element(By.NAME, "password")
+    password_input.clear()
+    password_input.send_keys(test_credentials["password"])
+    time.sleep(0.5)
+    
+    # Click sign in button
+    sign_in_button = driver.find_element(
+        By.XPATH, "//button[contains(text(), 'Sign In')]"
+    )
+    sign_in_button.click()
+    
+    # Wait for redirect to dashboard
+    WebDriverWait(driver, 15).until(
+        EC.url_contains("/dashboard")
+    )
+    
+    # Verify we're on the dashboard
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'Events Dashboard') or contains(text(), 'Dashboard')]"))
+    )
+    
+    time.sleep(1)  # Brief pause for page to fully load
+
+
+@pytest.fixture(scope="session")
+def authenticated_driver(driver, base_url, test_credentials):
+    """
+    Create an authenticated session by signing in ONCE for the entire test session
+    This fixture logs in once and reuses the session for all tests
+    Re-authenticates if session was invalidated (e.g., by sign out test)
+    """
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    
+    # Check if we're already logged in by checking current URL and page content
+    def is_authenticated():
+        try:
+            driver.get(f"{base_url}/dashboard")
+            time.sleep(1)
+            current_url = driver.current_url
+            if "/dashboard" in current_url and "/login" not in current_url:
+                # Check if we're actually on dashboard (not redirected to login)
+                if "Events Dashboard" in driver.page_source or "Dashboard" in driver.page_source:
+                    return True
+        except:
+            pass
+        return False
+    
+    if is_authenticated():
+        print("✓ Already authenticated - reusing session")
+        return driver
+    
+    # Navigate to login page
+    print("\n🔐 Logging in for test session...")
+    
     try:
-        # Fill in email
-        email_input = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.NAME, "email"))
-        )
-        email_input.clear()
-        email_input.send_keys(test_credentials["email"])
-        
-        # Fill in password
-        password_input = driver.find_element(By.NAME, "password")
-        password_input.clear()
-        password_input.send_keys(test_credentials["password"])
-        
-        # Click sign in button
-        sign_in_button = driver.find_element(
-            By.XPATH, "//button[contains(text(), 'Sign In')]"
-        )
-        sign_in_button.click()
-        
-        # Wait for redirect to dashboard
-        WebDriverWait(driver, 15).until(
-            EC.url_contains("/dashboard")
-        )
-        
-        # Give it a moment for the page to fully load
-        time.sleep(2)
-        
+        _perform_login(driver, base_url, test_credentials)
+        print("✓ Successfully authenticated - session ready for all tests")
         return driver
     except Exception as e:
-        pytest.skip(f"Could not authenticate: {str(e)}")
+        pytest.fail(f"Could not authenticate: {str(e)}")
+
+
+@pytest.fixture(scope="function")
+def ensure_authenticated(driver, base_url, test_credentials):
+    """
+    Fixture that ensures authentication before each test.
+    Use this for tests that might run after sign-out.
+    """
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    
+    # Check if we need to re-authenticate
+    try:
+        driver.get(f"{base_url}/dashboard")
+        time.sleep(1)
+        if "/login" in driver.current_url:
+            print("🔐 Re-authenticating...")
+            _perform_login(driver, base_url, test_credentials)
+            print("✓ Re-authenticated successfully")
+    except Exception as e:
+        print(f"⚠️ Re-authentication needed: {e}")
+        _perform_login(driver, base_url, test_credentials)
+    
+    return driver
 
