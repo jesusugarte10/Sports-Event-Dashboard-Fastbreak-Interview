@@ -15,7 +15,7 @@ export async function signUpAction(formData: FormData) {
     }
 
     const supabase = await createClient()
-    const { error } = await supabase.auth.signUp({
+    const { error, data } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -23,7 +23,24 @@ export async function signUpAction(formData: FormData) {
       },
     })
 
-    if (error) throw error
+    if (error) {
+      // Supabase error codes for existing users
+      // Check if user already exists
+      if (
+        error.message.includes('already registered') ||
+        error.message.includes('User already registered') ||
+        error.message.includes('already exists') ||
+        error.status === 422
+      ) {
+        // Provide helpful message suggesting Google sign-in or password reset
+        throw new Error(
+          'An account with this email already exists. If you signed up with Google, please use "Sign in with Google" instead. Otherwise, please sign in or use "Forgot Password" to reset your password.'
+        )
+      }
+      throw error
+    }
+    
+    return data
   })
 }
 
@@ -42,10 +59,50 @@ export async function signInAction(formData: FormData) {
       password,
     })
 
-    if (error) throw error
+    if (error) {
+      // Supabase returns specific error messages for different scenarios
+      // If credentials are invalid, it could be:
+      // 1. Wrong password
+      // 2. Account created with OAuth (no password set)
+      // 3. Account doesn't exist
+      
+      if (
+        error.message.includes('Invalid login credentials') ||
+        error.message.includes('Invalid credentials') ||
+        error.message.includes('Email not confirmed')
+      ) {
+        // Provide helpful message that covers both cases
+        throw new Error(
+          'Invalid email or password. If you signed up with Google, please use "Sign in with Google" instead. Otherwise, check your credentials or use "Forgot Password" to reset your password.'
+        )
+      }
+      
+      throw error
+    }
 
     revalidatePath('/', 'layout')
     redirect('/dashboard')
+  })
+}
+
+export async function resetPasswordAction(email: string) {
+  return safeAction(async () => {
+    if (!email) {
+      throw new Error('Email is required')
+    }
+
+    const supabase = await createClient()
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/reset-password`,
+    })
+
+    if (error) {
+      // Provide helpful error messages
+      if (error.message.includes('not found') || error.message.includes('does not exist')) {
+        throw new Error('No account found with this email address.')
+      }
+      throw error
+    }
   })
 }
 

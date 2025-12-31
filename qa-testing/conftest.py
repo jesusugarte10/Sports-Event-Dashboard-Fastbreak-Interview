@@ -21,10 +21,14 @@ def driver():
     """Setup and teardown driver for each test"""
     options = Options()
     
-    # Check if we should run in headless mode (default: True)
-    headless = os.getenv("HEADLESS", "true").lower() == "true"
+    # Check if we should run in headless mode (default: False - show browser for visual testing)
+    headless = os.getenv("HEADLESS", "false").lower() == "true"
     if headless:
         options.add_argument("--headless")
+    else:
+        # Add options for better visibility when not headless
+        options.add_argument("--start-maximized")
+        options.add_argument("--disable-blink-features=AutomationControlled")
     
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")

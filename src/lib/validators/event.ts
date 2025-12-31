@@ -15,8 +15,8 @@ export const eventSchema = z.object({
     // Convert to ISO string for database storage
     return new Date(val).toISOString()
   }),
-  description: z.string().max(1000).nullish().transform((val) => (val && val.trim()) || undefined),
-  location: z.string().max(200).nullish().transform((val) => (val && val.trim()) || undefined),
+  description: z.string().max(1000).optional(),
+  location: z.string().max(200).optional(),
   venueNames: z.array(z.string().min(1, 'Venue name cannot be empty')).min(1, 'At least one venue is required'),
 })
 

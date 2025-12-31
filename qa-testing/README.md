@@ -48,6 +48,34 @@ cd qa-testing
 ./setup.sh
 ```
 
+### Running Tests with Visible Browser (Recommended for Visual Testing)
+
+**By default, tests run with a visible browser so you can watch them execute!**
+
+```bash
+# Run comprehensive test suite (recommended - covers all basic functionality)
+./run_visible_tests.sh
+
+# Or run specific test suites
+./run_visible_tests.sh test_auth.py
+./run_visible_tests.sh test_dashboard.py
+./run_visible_tests.sh test_comprehensive.py
+```
+
+The browser window will open and you'll see:
+- ✅ Each test step executing in real-time
+- ✅ Form filling, button clicks, navigation
+- ✅ Visual feedback for all actions
+- ✅ Console output showing test progress
+
+### Running Tests in Headless Mode (Background)
+
+If you want to run tests without seeing the browser:
+
+```bash
+HEADLESS=true ./run_tests.sh comprehensive
+```
+
 This will:
 - Create a Python virtual environment
 - Install all dependencies
