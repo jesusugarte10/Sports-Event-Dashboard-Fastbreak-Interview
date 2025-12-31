@@ -35,19 +35,20 @@ export async function listEventsAction(search?: string, sport?: string, dateFilt
     if (search) {
       // Escape special characters in two stages:
       // 1. Escape SQL ILIKE wildcards so they're treated as literal characters
-      // 2. Escape PostgREST filter syntax characters
+      // 2. Escape PostgREST filter syntax characters (only for raw filter strings)
       
       // First, escape SQL ILIKE wildcards (% and _) by doubling them or using backslash
       // In PostgreSQL ILIKE, backslash escapes wildcards
-      let escapedSearch = search
-        .replace(/\\/g, '\\\\')  // Escape backslashes first (for both SQL and PostgREST)
+      // This version is used for Supabase .ilike() method calls
+      const sqlEscapedSearch = search
+        .replace(/\\/g, '\\\\')  // Escape backslashes first
         .replace(/%/g, '\\%')    // Escape % wildcard (matches any sequence)
         .replace(/_/g, '\\_')    // Escape _ wildcard (matches single character)
       
-      // Then escape PostgREST filter syntax characters
+      // For raw PostgREST filter strings, also escape filter syntax characters
       // Commas separate OR conditions, periods separate field.operator.value
       // Parentheses group conditions
-      escapedSearch = escapedSearch
+      const postGrestEscapedSearch = sqlEscapedSearch
         .replace(/,/g, '\\,')    // Escape commas
         .replace(/\./g, '\\.')   // Escape periods
         .replace(/\(/g, '\\(')   // Escape opening parentheses
@@ -55,10 +56,11 @@ export async function listEventsAction(search?: string, sport?: string, dateFilt
       
       // Find event IDs that have venues matching the search term
       // This allows searching by venue name across the related table
+      // Use sqlEscapedSearch since .ilike() is a Supabase method, not a raw filter string
       const { data: matchingVenues } = await supabase
         .from('venues')
         .select('id')
-        .ilike('name', `%${search}%`)
+        .ilike('name', `%${sqlEscapedSearch}%`)
       
       const venueIds = matchingVenues?.map(v => v.id) || []
       
@@ -74,7 +76,8 @@ export async function listEventsAction(search?: string, sport?: string, dateFilt
       }
       
       // Build the OR filter including venue matches
-      let orFilter = `name.ilike.%${escapedSearch}%,sport.ilike.%${escapedSearch}%,description.ilike.%${escapedSearch}%,location.ilike.%${escapedSearch}%`
+      // Use postGrestEscapedSearch since this is a raw filter string passed to .or()
+      let orFilter = `name.ilike.%${postGrestEscapedSearch}%,sport.ilike.%${postGrestEscapedSearch}%,description.ilike.%${postGrestEscapedSearch}%,location.ilike.%${postGrestEscapedSearch}%`
       
       // Add event IDs that have matching venues to the OR filter
       if (eventIdsWithMatchingVenues.length > 0) {
