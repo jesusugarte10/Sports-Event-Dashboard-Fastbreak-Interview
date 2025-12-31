@@ -71,6 +71,16 @@ export function AIEventCreator() {
   const [showExamples, setShowExamples] = useState(true)
   const router = useRouter()
 
+  // Format date safely to prevent hydration mismatches - must be at top level
+  const formattedDateTime = React.useMemo(() => {
+    if (!extractedEvent?.dateTime) return null
+    try {
+      return format(new Date(extractedEvent.dateTime), 'PPP p')
+    } catch {
+      return extractedEvent.dateTime
+    }
+  }, [extractedEvent?.dateTime])
+
   const handleExampleClick = (text: string) => {
     setInput(text)
     setShowExamples(false)
@@ -359,18 +369,10 @@ export function AIEventCreator() {
                   </div>
                   
                   <div className="space-y-2 text-sm">
-                    {extractedEvent.dateTime && (
+                    {formattedDateTime && (
                       <div className="flex items-center gap-2 text-muted-foreground">
                         <Calendar className="h-4 w-4 text-primary" />
-                        <span>
-                          {React.useMemo(() => {
-                            try {
-                              return format(new Date(extractedEvent.dateTime!), 'PPP p')
-                            } catch {
-                              return extractedEvent.dateTime
-                            }
-                          }, [extractedEvent.dateTime])}
-                        </span>
+                        <span>{formattedDateTime}</span>
                       </div>
                     )}
                     {extractedEvent.location && (
