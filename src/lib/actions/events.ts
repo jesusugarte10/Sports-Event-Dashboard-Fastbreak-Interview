@@ -6,7 +6,7 @@ import { safeAction } from './safe-action'
 import { eventSchema, type EventFormData } from '@/lib/validators/event'
 import { revalidatePath } from 'next/cache'
 
-export async function listEventsAction(search?: string, sport?: string) {
+export async function listEventsAction(search?: string, sport?: string, dateFilter?: string, sortOption?: string) {
   return safeAction(async () => {
     const user = await getUser()
     if (!user) throw new Error('Unauthorized')
@@ -30,14 +30,149 @@ export async function listEventsAction(search?: string, sport?: string) {
         )
       `)
       .eq('user_id', user.id)
-      .order('starts_at', { ascending: true })
 
+    // Search across multiple fields including venue names
     if (search) {
-      query = query.ilike('name', `%${search}%`)
+      // Escape special characters in two stages:
+      // 1. Escape SQL ILIKE wildcards so they're treated as literal characters
+      // 2. Escape PostgREST filter syntax characters (only for raw filter strings)
+      
+      // First, escape SQL ILIKE wildcards (% and _) by doubling them or using backslash
+      // In PostgreSQL ILIKE, backslash escapes wildcards
+      // This version is used for Supabase .ilike() method calls
+      const sqlEscapedSearch = search
+        .replace(/\\/g, '\\\\')  // Escape backslashes first
+        .replace(/%/g, '\\%')    // Escape % wildcard (matches any sequence)
+        .replace(/_/g, '\\_')    // Escape _ wildcard (matches single character)
+      
+      // For raw PostgREST filter strings, also escape filter syntax characters
+      // Commas separate OR conditions, periods separate field.operator.value
+      // Parentheses group conditions
+      const postGrestEscapedSearch = sqlEscapedSearch
+        .replace(/,/g, '\\,')    // Escape commas
+        .replace(/\./g, '\\.')   // Escape periods
+        .replace(/\(/g, '\\(')   // Escape opening parentheses
+        .replace(/\)/g, '\\)')   // Escape closing parentheses
+      
+      // Find event IDs that have venues matching the search term
+      // This allows searching by venue name across the related table
+      // Use sqlEscapedSearch since .ilike() is a Supabase method, not a raw filter string
+      const { data: matchingVenues } = await supabase
+        .from('venues')
+        .select('id')
+        .ilike('name', `%${sqlEscapedSearch}%`)
+      
+      const venueIds = matchingVenues?.map(v => v.id) || []
+      
+      // If we found matching venues, get the event IDs linked to them
+      let eventIdsWithMatchingVenues: string[] = []
+      if (venueIds.length > 0) {
+        const { data: eventVenues } = await supabase
+          .from('event_venues')
+          .select('event_id')
+          .in('venue_id', venueIds)
+        
+        eventIdsWithMatchingVenues = eventVenues?.map(ev => ev.event_id) || []
+      }
+      
+      // Build the OR filter including venue matches
+      // Use postGrestEscapedSearch since this is a raw filter string passed to .or()
+      let orFilter = `name.ilike.%${postGrestEscapedSearch}%,sport.ilike.%${postGrestEscapedSearch}%,description.ilike.%${postGrestEscapedSearch}%,location.ilike.%${postGrestEscapedSearch}%`
+      
+      // Add event IDs that have matching venues to the OR filter
+      if (eventIdsWithMatchingVenues.length > 0) {
+        // Add each matching event ID to the OR filter
+        const idFilters = eventIdsWithMatchingVenues.map(id => `id.eq.${id}`).join(',')
+        orFilter += `,${idFilters}`
+      }
+      
+      query = query.or(orFilter)
     }
 
+    // Filter by sport
     if (sport) {
       query = query.eq('sport', sport)
+    }
+
+    // Date filtering - use consistent UTC-based date boundaries
+    // This ensures predictable behavior regardless of server timezone
+    if (dateFilter && dateFilter !== 'all') {
+      const now = new Date()
+      
+      // Helper to create start of day in UTC (00:00:00.000 UTC)
+      const getStartOfDayUTC = (date: Date) => {
+        return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0))
+      }
+      
+      // Helper to create end of day in UTC (23:59:59.999 UTC)
+      const getEndOfDayUTC = (date: Date) => {
+        return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999))
+      }
+      
+      switch (dateFilter) {
+        case 'today': {
+          const startOfDay = getStartOfDayUTC(now)
+          const endOfDay = getEndOfDayUTC(now)
+          query = query
+            .gte('starts_at', startOfDay.toISOString())
+            .lte('starts_at', endOfDay.toISOString())
+          break
+        }
+        case 'week': {
+          // Get start of current week (Sunday) in UTC using explicit Date.UTC construction
+          // Note: Date.UTC() correctly normalizes out-of-range day values (0 or negative)
+          // by wrapping to the previous month, so this handles month boundaries correctly
+          const dayOfWeek = now.getUTCDay()
+          const startOfWeekMs = Date.UTC(
+            now.getUTCFullYear(),
+            now.getUTCMonth(),
+            now.getUTCDate() - dayOfWeek,
+            0, 0, 0, 0
+          )
+          const startOfWeek = new Date(startOfWeekMs)
+          
+          // Get end of current week (Saturday) in UTC - 6 days after Sunday
+          const endOfWeekMs = Date.UTC(
+            now.getUTCFullYear(),
+            now.getUTCMonth(),
+            now.getUTCDate() - dayOfWeek + 6,
+            23, 59, 59, 999
+          )
+          const endOfWeek = new Date(endOfWeekMs)
+          
+          query = query
+            .gte('starts_at', startOfWeek.toISOString())
+            .lte('starts_at', endOfWeek.toISOString())
+          break
+        }
+        case 'month': {
+          const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0))
+          // Day 0 of next month = last day of current month
+          const endOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999))
+          query = query
+            .gte('starts_at', startOfMonth.toISOString())
+            .lte('starts_at', endOfMonth.toISOString())
+          break
+        }
+        case 'upcoming':
+          query = query.gte('starts_at', now.toISOString())
+          break
+        case 'past':
+          query = query.lt('starts_at', now.toISOString())
+          break
+      }
+    }
+
+    // Sorting
+    const [sortField, sortDirection] = (sortOption || 'date-asc').split('-')
+    const ascending = sortDirection === 'asc'
+    
+    if (sortField === 'date') {
+      query = query.order('starts_at', { ascending })
+    } else if (sortField === 'name') {
+      query = query.order('name', { ascending })
+    } else {
+      query = query.order('starts_at', { ascending: true })
     }
 
     const { data, error } = await query

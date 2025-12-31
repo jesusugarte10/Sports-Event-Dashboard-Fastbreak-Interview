@@ -39,19 +39,19 @@ type EventData = {
 
 const EXAMPLE_PROMPTS = [
   {
-    text: 'Basketball tournament next Saturday at 2 PM',
+    text: 'Basketball game next Saturday at 2 PM',
     icon: '🏀',
   },
   {
-    text: 'Weekly soccer practice every Monday at 6 PM',
+    text: 'Soccer match this Sunday at 10 AM',
     icon: '⚽',
   },
   {
-    text: 'Tennis championship on March 15th',
+    text: 'Tennis match tomorrow at 3 PM',
     icon: '🎾',
   },
   {
-    text: 'Pickleball league starting next month',
+    text: 'Pickleball game this weekend at noon',
     icon: '🏓',
   },
 ]

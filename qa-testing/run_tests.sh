@@ -2,8 +2,15 @@
 
 # Test runner script for QA Testing
 
+# Navigate to script directory
+cd "$(dirname "$0")"
+
 # Activate virtual environment if it exists
 if [ -d "venv" ]; then
+    source venv/bin/activate
+else
+    echo "❌ Virtual environment not found. Running setup..."
+    ./setup.sh
     source venv/bin/activate
 fi
 
@@ -31,19 +38,19 @@ fi
 # Set HEADLESS environment variable (default: false - show browser)
 export HEADLESS=${HEADLESS:-false}
 
-# Run tests based on argument
+# Run tests based on argument using python3 -m pytest for reliability
 if [ "$1" == "auth" ]; then
-    pytest test_auth.py -v -s
+    python3 -m pytest test_auth.py -v -s
 elif [ "$1" == "dashboard" ]; then
-    pytest test_dashboard.py -v -s
+    python3 -m pytest test_dashboard.py -v -s
 elif [ "$1" == "ai" ]; then
-    pytest test_ai_features.py -v -s
+    python3 -m pytest test_ai_features.py -v -s
 elif [ "$1" == "integration" ]; then
-    pytest test_integration.py -v -s
+    python3 -m pytest test_integration.py -v -s
 elif [ "$1" == "comprehensive" ]; then
-    pytest test_comprehensive.py -v -s
+    python3 -m pytest test_comprehensive.py -v -s
 elif [ "$1" == "all" ] || [ -z "$1" ]; then
-    pytest -v -s --html=reports/report.html --self-contained-html
+    python3 -m pytest -v -s --html=reports/report.html --self-contained-html
     echo ""
     echo "📊 Test report generated: reports/report.html"
 else

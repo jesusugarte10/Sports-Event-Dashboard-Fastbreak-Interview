@@ -173,12 +173,12 @@ class TestAIFeatures:
         )
         time.sleep(0.5)
         
-        # Click on one of the example prompts (e.g., Basketball tournament)
+        # Click on one of the example prompts (e.g., Basketball game)
         example_button = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Basketball tournament')]"))
+            EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Basketball game')]"))
         )
         example_button.click()
-        print("✓ Clicked on 'Basketball tournament' example")
+        print("✓ Clicked on 'Basketball game' example")
         
         # Wait for AI to process - look for "Thinking..." or response
         time.sleep(3)  # Give AI time to process

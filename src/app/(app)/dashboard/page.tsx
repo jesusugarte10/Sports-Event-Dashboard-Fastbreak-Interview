@@ -13,6 +13,8 @@ type DashboardPageProps = {
   searchParams: Promise<{
     search?: string
     sport?: string
+    date?: string
+    sort?: string
   }>
 }
 
@@ -43,8 +45,8 @@ function EventListSkeleton() {
   )
 }
 
-async function EventList({ search, sport }: { search?: string; sport?: string }) {
-  const result = await listEventsAction(search, sport)
+async function EventList({ search, sport, date, sort }: { search?: string; sport?: string; date?: string; sort?: string }) {
+  const result = await listEventsAction(search, sport, date, sort)
 
   if (!result.ok) {
     return (
@@ -111,6 +113,8 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const params = await searchParams
   const search = params.search
   const sport = params.sport
+  const date = params.date
+  const sort = params.sort
 
   return (
     <div className="space-y-6">
@@ -136,11 +140,16 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       </div>
 
       {/* Search and Filter */}
-      <DashboardClient initialSearch={search} initialSport={sport} sports={SPORTS} />
+      <DashboardClient 
+        initialSearch={search} 
+        initialSport={sport} 
+        initialDateFilter={date}
+        sports={SPORTS} 
+      />
 
       {/* Events List */}
-      <Suspense key={`${search}-${sport}`} fallback={<EventListSkeleton />}>
-        <EventList search={search} sport={sport} />
+      <Suspense key={`${search}-${sport}-${date}-${sort}`} fallback={<EventListSkeleton />}>
+        <EventList search={search} sport={sport} date={date} sort={sort} />
       </Suspense>
     </div>
   )
