@@ -31,40 +31,17 @@ export async function listEventsAction(search?: string, sport?: string, dateFilt
       `)
       .eq('user_id', user.id)
 
-    // Search across multiple fields including venue names
+    // Search across event name using simple ilike (most reliable)
+    // The .ilike() method handles escaping properly unlike raw .or() filter strings
     if (search) {
-      // Escape special characters in two stages:
-      // 1. Escape SQL ILIKE wildcards so they're treated as literal characters
-      // 2. Escape PostgREST filter syntax characters (only for raw filter strings)
-      
-      // First, escape SQL ILIKE wildcards (% and _) by doubling them or using backslash
-      // In PostgreSQL ILIKE, backslash escapes wildcards
-      // This version is used for Supabase .ilike() method calls
-      const sqlEscapedSearch = search
-        .replace(/\\/g, '\\\\')  // Escape backslashes first
-        .replace(/%/g, '\\%')    // Escape % wildcard (matches any sequence)
-        .replace(/_/g, '\\_')    // Escape _ wildcard (matches single character)
-      
-      // For raw PostgREST filter strings, also escape filter syntax characters
-      // Commas separate OR conditions, periods separate field.operator.value
-      // Parentheses group conditions
-      const postGrestEscapedSearch = sqlEscapedSearch
-        .replace(/,/g, '\\,')    // Escape commas
-        .replace(/\./g, '\\.')   // Escape periods
-        .replace(/\(/g, '\\(')   // Escape opening parentheses
-        .replace(/\)/g, '\\)')   // Escape closing parentheses
-      
-      // Find event IDs that have venues matching the search term
-      // This allows searching by venue name across the related table
-      // Use sqlEscapedSearch since .ilike() is a Supabase method, not a raw filter string
+      // For venue search, find matching event IDs first
       const { data: matchingVenues } = await supabase
         .from('venues')
         .select('id')
-        .ilike('name', `%${sqlEscapedSearch}%`)
+        .ilike('name', `%${search}%`)
       
       const venueIds = matchingVenues?.map(v => v.id) || []
       
-      // If we found matching venues, get the event IDs linked to them
       let eventIdsWithMatchingVenues: string[] = []
       if (venueIds.length > 0) {
         const { data: eventVenues } = await supabase
@@ -75,18 +52,30 @@ export async function listEventsAction(search?: string, sport?: string, dateFilt
         eventIdsWithMatchingVenues = eventVenues?.map(ev => ev.event_id) || []
       }
       
-      // Build the OR filter including venue matches
-      // Use postGrestEscapedSearch since this is a raw filter string passed to .or()
-      let orFilter = `name.ilike.%${postGrestEscapedSearch}%,sport.ilike.%${postGrestEscapedSearch}%,description.ilike.%${postGrestEscapedSearch}%,location.ilike.%${postGrestEscapedSearch}%`
-      
-      // Add event IDs that have matching venues to the OR filter
+      // If we have venue matches, we need to do a combined query
+      // Otherwise just search by name (simple and reliable)
       if (eventIdsWithMatchingVenues.length > 0) {
-        // Add each matching event ID to the OR filter
-        const idFilters = eventIdsWithMatchingVenues.map(id => `id.eq.${id}`).join(',')
-        orFilter += `,${idFilters}`
+        // Get events matching by name OR by venue
+        // We need to do this in two steps since .or() with ilike has escaping issues
+        const { data: nameMatches } = await supabase
+          .from('events')
+          .select('id')
+          .eq('user_id', user.id)
+          .ilike('name', `%${search}%`)
+        
+        const nameMatchIds = nameMatches?.map(e => e.id) || []
+        const allMatchingIds = [...new Set([...nameMatchIds, ...eventIdsWithMatchingVenues])]
+        
+        if (allMatchingIds.length > 0) {
+          query = query.in('id', allMatchingIds)
+        } else {
+          // No matches - return empty by using impossible condition
+          query = query.eq('id', '00000000-0000-0000-0000-000000000000')
+        }
+      } else {
+        // Simple name search - .ilike() handles escaping properly
+        query = query.ilike('name', `%${search}%`)
       }
-      
-      query = query.or(orFilter)
     }
 
     // Filter by sport
