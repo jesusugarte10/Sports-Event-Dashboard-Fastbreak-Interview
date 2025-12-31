@@ -31,7 +31,7 @@ export async function listEventsAction(search?: string, sport?: string, dateFilt
       `)
       .eq('user_id', user.id)
 
-    // Search across multiple fields
+    // Search across multiple fields including venue names
     if (search) {
       // Escape special characters in two stages:
       // 1. Escape SQL ILIKE wildcards so they're treated as literal characters
@@ -53,9 +53,37 @@ export async function listEventsAction(search?: string, sport?: string, dateFilt
         .replace(/\(/g, '\\(')   // Escape opening parentheses
         .replace(/\)/g, '\\)')   // Escape closing parentheses
       
-      query = query.or(
-        `name.ilike.%${escapedSearch}%,sport.ilike.%${escapedSearch}%,description.ilike.%${escapedSearch}%,location.ilike.%${escapedSearch}%`
-      )
+      // Find event IDs that have venues matching the search term
+      // This allows searching by venue name across the related table
+      const { data: matchingVenues } = await supabase
+        .from('venues')
+        .select('id')
+        .ilike('name', `%${search}%`)
+      
+      const venueIds = matchingVenues?.map(v => v.id) || []
+      
+      // If we found matching venues, get the event IDs linked to them
+      let eventIdsWithMatchingVenues: string[] = []
+      if (venueIds.length > 0) {
+        const { data: eventVenues } = await supabase
+          .from('event_venues')
+          .select('event_id')
+          .in('venue_id', venueIds)
+        
+        eventIdsWithMatchingVenues = eventVenues?.map(ev => ev.event_id) || []
+      }
+      
+      // Build the OR filter including venue matches
+      let orFilter = `name.ilike.%${escapedSearch}%,sport.ilike.%${escapedSearch}%,description.ilike.%${escapedSearch}%,location.ilike.%${escapedSearch}%`
+      
+      // Add event IDs that have matching venues to the OR filter
+      if (eventIdsWithMatchingVenues.length > 0) {
+        // Add each matching event ID to the OR filter
+        const idFilters = eventIdsWithMatchingVenues.map(id => `id.eq.${id}`).join(',')
+        orFilter += `,${idFilters}`
+      }
+      
+      query = query.or(orFilter)
     }
 
     // Filter by sport
