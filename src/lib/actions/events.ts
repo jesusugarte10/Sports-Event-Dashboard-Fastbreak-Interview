@@ -33,12 +33,23 @@ export async function listEventsAction(search?: string, sport?: string, dateFilt
 
     // Search across multiple fields
     if (search) {
-      // Escape special characters that could break PostgREST filter syntax
-      // Commas separate OR conditions, so they must be escaped
-      // Periods separate field.operator.value, parentheses group conditions
-      const escapedSearch = search
-        .replace(/\\/g, '\\\\')  // Escape backslashes first
+      // Escape special characters in two stages:
+      // 1. Escape SQL ILIKE wildcards so they're treated as literal characters
+      // 2. Escape PostgREST filter syntax characters
+      
+      // First, escape SQL ILIKE wildcards (% and _) by doubling them or using backslash
+      // In PostgreSQL ILIKE, backslash escapes wildcards
+      let escapedSearch = search
+        .replace(/\\/g, '\\\\')  // Escape backslashes first (for both SQL and PostgREST)
+        .replace(/%/g, '\\%')    // Escape % wildcard (matches any sequence)
+        .replace(/_/g, '\\_')    // Escape _ wildcard (matches single character)
+      
+      // Then escape PostgREST filter syntax characters
+      // Commas separate OR conditions, periods separate field.operator.value
+      // Parentheses group conditions
+      escapedSearch = escapedSearch
         .replace(/,/g, '\\,')    // Escape commas
+        .replace(/\./g, '\\.')   // Escape periods
         .replace(/\(/g, '\\(')   // Escape opening parentheses
         .replace(/\)/g, '\\)')   // Escape closing parentheses
       
