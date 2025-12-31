@@ -52,7 +52,7 @@ export function DashboardClient({
       const params = new URLSearchParams(window.location.search)
       const currentSearch = params.get('search') || ''
       
-      // Only push if the search value has actually changed from the URL
+      // Only update if the search value has actually changed from the URL
       if (searchValue !== currentSearch) {
         if (searchValue) {
           params.set('search', searchValue)
@@ -60,7 +60,8 @@ export function DashboardClient({
           params.delete('search')
         }
         startTransition(() => {
-          router.push(`/dashboard?${params.toString()}`)
+          // Use replace with scroll:false to avoid disrupting focus/keyboard on mobile
+          router.replace(`/dashboard?${params.toString()}`, { scroll: false })
         })
       }
     }, 300) // 300ms debounce delay
@@ -98,7 +99,7 @@ export function DashboardClient({
     }
     
     startTransition(() => {
-      router.push(`/dashboard?${params.toString()}`)
+      router.replace(`/dashboard?${params.toString()}`, { scroll: false })
     })
   }
 
