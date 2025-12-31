@@ -1,3 +1,8 @@
+# OS files
+.DS_Store
+**/.DS_Store
+
+# Build
 .next
 node_modules
 .env.local
