@@ -35,26 +35,31 @@ export async function createEventWithAIAction(messages: ChatMessage[]) {
       throw new Error('Gemini API key not configured')
     }
 
-    // Get current date info for the AI
+    // Get current date info for the AI - use UTC consistently to avoid timezone mismatches
     const now = new Date()
-    const currentDate = now.toISOString().split('T')[0] // YYYY-MM-DD
-    const currentYear = now.getFullYear()
-    const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long' })
+    const currentYear = now.getUTCFullYear()
+    const currentMonth = now.getUTCMonth()
+    const currentDay = now.getUTCDate()
     
-    // Calculate helpful reference dates
-    const tomorrow = new Date(now)
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    const tomorrowDate = tomorrow.toISOString().split('T')[0]
+    // Format current date as YYYY-MM-DD in UTC
+    const currentDate = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`
     
-    // Find next Saturday and Sunday for "this weekend"
-    const daysUntilSaturday = (6 - now.getDay() + 7) % 7 || 7
-    const nextSaturday = new Date(now)
-    nextSaturday.setDate(now.getDate() + daysUntilSaturday)
-    const nextSaturdayDate = nextSaturday.toISOString().split('T')[0]
+    // Get day of week in UTC
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+    const dayOfWeek = dayNames[now.getUTCDay()]
     
-    const nextSunday = new Date(nextSaturday)
-    nextSunday.setDate(nextSaturday.getDate() + 1)
-    const nextSundayDate = nextSunday.toISOString().split('T')[0]
+    // Calculate tomorrow in UTC
+    const tomorrowDate = new Date(Date.UTC(currentYear, currentMonth, currentDay + 1))
+    const tomorrowDateStr = tomorrowDate.toISOString().split('T')[0]
+    
+    // Find next Saturday and Sunday for "this weekend" in UTC
+    const utcDayOfWeek = now.getUTCDay()
+    const daysUntilSaturday = (6 - utcDayOfWeek + 7) % 7 || 7
+    const nextSaturdayDate = new Date(Date.UTC(currentYear, currentMonth, currentDay + daysUntilSaturday))
+    const nextSaturdayDateStr = nextSaturdayDate.toISOString().split('T')[0]
+    
+    const nextSundayDate = new Date(Date.UTC(currentYear, currentMonth, currentDay + daysUntilSaturday + 1))
+    const nextSundayDateStr = nextSundayDate.toISOString().split('T')[0]
 
     // Build conversation with system context
     const systemContext = `You are an AI assistant EXCLUSIVELY for creating SPORTS EVENTS. Your ONLY purpose is to help users create sports events. If users ask about anything NOT related to sports events, politely redirect them. Available sports: Basketball, Football, Soccer, Baseball, Tennis, Volleyball, Hockey, Pickleball, Other.`
@@ -69,9 +74,9 @@ export async function createEventWithAIAction(messages: ChatMessage[]) {
 CRITICAL DATE INFORMATION - USE THESE EXACT VALUES:
 - TODAY'S DATE: ${currentDate} (${dayOfWeek})
 - CURRENT YEAR: ${currentYear}
-- TOMORROW: ${tomorrowDate}
-- THIS WEEKEND (Saturday): ${nextSaturdayDate}
-- THIS WEEKEND (Sunday): ${nextSundayDate}
+- TOMORROW: ${tomorrowDateStr}
+- THIS WEEKEND (Saturday): ${nextSaturdayDateStr}
+- THIS WEEKEND (Sunday): ${nextSundayDateStr}
 
 IMPORTANT RULES:
 - ONLY respond to requests about creating SPORTS EVENTS
@@ -88,9 +93,9 @@ Based on the conversation below, extract event details and respond in TWO parts:
 
 DATE/TIME CONVERSION RULES - FOLLOW EXACTLY:
 - "today" → ${currentDate}
-- "tomorrow" → ${tomorrowDate}
-- "this weekend" or "this Saturday" → ${nextSaturdayDate}
-- "this Sunday" → ${nextSundayDate}
+- "tomorrow" → ${tomorrowDateStr}
+- "this weekend" or "this Saturday" → ${nextSaturdayDateStr}
+- "this Sunday" → ${nextSundayDateStr}
 - "next week" = add 7 days to today: calculate from ${currentDate}
 - "next Monday/Tuesday/etc" = find the next occurrence of that day from ${currentDate}
 - Time conversion: "2 PM" or "2pm" or "2:00 PM" → 14:00:00

@@ -68,16 +68,24 @@ export async function listEventsAction(search?: string, sport?: string, dateFilt
           break
         }
         case 'week': {
-          // Get start of current week (Sunday) in UTC
+          // Get start of current week (Sunday) in UTC using explicit Date.UTC construction
           const dayOfWeek = now.getUTCDay()
-          const startOfWeekDate = new Date(now)
-          startOfWeekDate.setUTCDate(now.getUTCDate() - dayOfWeek)
-          const startOfWeek = getStartOfDayUTC(startOfWeekDate)
+          const startOfWeekMs = Date.UTC(
+            now.getUTCFullYear(),
+            now.getUTCMonth(),
+            now.getUTCDate() - dayOfWeek,
+            0, 0, 0, 0
+          )
+          const startOfWeek = new Date(startOfWeekMs)
           
-          // Get end of current week (Saturday) in UTC
-          const endOfWeekDate = new Date(startOfWeekDate)
-          endOfWeekDate.setUTCDate(startOfWeekDate.getUTCDate() + 6)
-          const endOfWeek = getEndOfDayUTC(endOfWeekDate)
+          // Get end of current week (Saturday) in UTC - 6 days after Sunday
+          const endOfWeekMs = Date.UTC(
+            now.getUTCFullYear(),
+            now.getUTCMonth(),
+            now.getUTCDate() - dayOfWeek + 6,
+            23, 59, 59, 999
+          )
+          const endOfWeek = new Date(endOfWeekMs)
           
           query = query
             .gte('starts_at', startOfWeek.toISOString())
