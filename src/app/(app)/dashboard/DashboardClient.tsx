@@ -39,6 +39,11 @@ export function DashboardClient({
   const [searchValue, setSearchValue] = useState(initialSearch || '')
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
 
+  // Sync search value when URL changes (e.g., browser back/forward)
+  useEffect(() => {
+    setSearchValue(initialSearch || '')
+  }, [initialSearch])
+
   // Debounced search - only update URL after user stops typing
   useEffect(() => {
     // Clear any existing timeout
@@ -52,10 +57,13 @@ export function DashboardClient({
       const params = new URLSearchParams(window.location.search)
       const currentSearch = params.get('search') || ''
       
+      // Trim the search value - whitespace-only should be treated as empty
+      const trimmedSearch = searchValue.trim()
+      
       // Only update if the search value has actually changed from the URL
-      if (searchValue !== currentSearch) {
-        if (searchValue) {
-          params.set('search', searchValue)
+      if (trimmedSearch !== currentSearch) {
+        if (trimmedSearch) {
+          params.set('search', trimmedSearch)
         } else {
           params.delete('search')
         }
@@ -85,8 +93,10 @@ export function DashboardClient({
     const params = new URLSearchParams(window.location.search)
     
     // Include the current searchValue (which may not be in the URL yet due to debounce)
-    if (searchValue) {
-      params.set('search', searchValue)
+    // Trim whitespace - whitespace-only should be treated as empty
+    const trimmedSearch = searchValue.trim()
+    if (trimmedSearch) {
+      params.set('search', trimmedSearch)
     } else {
       params.delete('search')
     }

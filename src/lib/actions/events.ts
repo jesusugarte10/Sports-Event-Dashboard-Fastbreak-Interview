@@ -31,14 +31,22 @@ export async function listEventsAction(search?: string, sport?: string, dateFilt
       `)
       .eq('user_id', user.id)
 
-    // Search across event name using simple ilike (most reliable)
-    // The .ilike() method handles escaping properly unlike raw .or() filter strings
-    if (search) {
+    // Search across event name and venue name
+    const trimmedSearch = search?.trim()
+    if (trimmedSearch) {
+      // Escape SQL ILIKE wildcards so they're treated as literal characters
+      // % matches any sequence, _ matches single character
+      // Note: .ilike() does NOT auto-escape these - we must do it manually
+      const escapedSearch = trimmedSearch
+        .replace(/\\/g, '\\\\')  // Escape backslashes first
+        .replace(/%/g, '\\%')    // Escape % wildcard
+        .replace(/_/g, '\\_')    // Escape _ wildcard
+      
       // For venue search, find matching event IDs first
       const { data: matchingVenues } = await supabase
         .from('venues')
         .select('id')
-        .ilike('name', `%${search}%`)
+        .ilike('name', `%${escapedSearch}%`)
       
       const venueIds = matchingVenues?.map(v => v.id) || []
       
@@ -61,7 +69,7 @@ export async function listEventsAction(search?: string, sport?: string, dateFilt
           .from('events')
           .select('id')
           .eq('user_id', user.id)
-          .ilike('name', `%${search}%`)
+          .ilike('name', `%${escapedSearch}%`)
         
         const nameMatchIds = nameMatches?.map(e => e.id) || []
         const allMatchingIds = [...new Set([...nameMatchIds, ...eventIdsWithMatchingVenues])]
@@ -73,8 +81,8 @@ export async function listEventsAction(search?: string, sport?: string, dateFilt
           query = query.eq('id', '00000000-0000-0000-0000-000000000000')
         }
       } else {
-        // Simple name search - .ilike() handles escaping properly
-        query = query.ilike('name', `%${search}%`)
+        // Simple name search using escaped search term
+        query = query.ilike('name', `%${escapedSearch}%`)
       }
     }
 
