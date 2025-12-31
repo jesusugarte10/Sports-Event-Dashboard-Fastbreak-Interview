@@ -33,8 +33,17 @@ export async function listEventsAction(search?: string, sport?: string, dateFilt
 
     // Search across multiple fields
     if (search) {
+      // Escape special characters that could break PostgREST filter syntax
+      // Commas separate OR conditions, so they must be escaped
+      // Periods separate field.operator.value, parentheses group conditions
+      const escapedSearch = search
+        .replace(/\\/g, '\\\\')  // Escape backslashes first
+        .replace(/,/g, '\\,')    // Escape commas
+        .replace(/\(/g, '\\(')   // Escape opening parentheses
+        .replace(/\)/g, '\\)')   // Escape closing parentheses
+      
       query = query.or(
-        `name.ilike.%${search}%,sport.ilike.%${search}%,description.ilike.%${search}%,location.ilike.%${search}%`
+        `name.ilike.%${escapedSearch}%,sport.ilike.%${escapedSearch}%,description.ilike.%${escapedSearch}%,location.ilike.%${escapedSearch}%`
       )
     }
 
@@ -69,6 +78,8 @@ export async function listEventsAction(search?: string, sport?: string, dateFilt
         }
         case 'week': {
           // Get start of current week (Sunday) in UTC using explicit Date.UTC construction
+          // Note: Date.UTC() correctly normalizes out-of-range day values (0 or negative)
+          // by wrapping to the previous month, so this handles month boundaries correctly
           const dayOfWeek = now.getUTCDay()
           const startOfWeekMs = Date.UTC(
             now.getUTCFullYear(),
