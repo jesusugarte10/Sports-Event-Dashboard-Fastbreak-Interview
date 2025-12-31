@@ -31,7 +31,7 @@ export async function listEventsAction(search?: string, sport?: string, dateFilt
       `)
       .eq('user_id', user.id)
 
-    // Search across event name and venue name
+    // Search across all event metadata: name, sport, description, location, and venue
     const trimmedSearch = search?.trim()
     if (trimmedSearch) {
       // Escape SQL ILIKE wildcards so they're treated as literal characters
@@ -42,47 +42,48 @@ export async function listEventsAction(search?: string, sport?: string, dateFilt
         .replace(/%/g, '\\%')    // Escape % wildcard
         .replace(/_/g, '\\_')    // Escape _ wildcard
       
-      // For venue search, find matching event IDs first
-      const { data: matchingVenues } = await supabase
-        .from('venues')
-        .select('id')
-        .ilike('name', `%${escapedSearch}%`)
+      const searchPattern = `%${escapedSearch}%`
       
-      const venueIds = matchingVenues?.map(v => v.id) || []
+      // Search across all fields by collecting matching event IDs
+      // We do separate queries to avoid .or() escaping issues with special characters
+      const [nameMatches, sportMatches, descMatches, locationMatches, venueMatches] = await Promise.all([
+        // Search by name
+        supabase.from('events').select('id').eq('user_id', user.id).ilike('name', searchPattern),
+        // Search by sport
+        supabase.from('events').select('id').eq('user_id', user.id).ilike('sport', searchPattern),
+        // Search by description
+        supabase.from('events').select('id').eq('user_id', user.id).ilike('description', searchPattern),
+        // Search by location
+        supabase.from('events').select('id').eq('user_id', user.id).ilike('location', searchPattern),
+        // Search by venue name (requires joining through event_venues)
+        supabase.from('venues').select('id').ilike('name', searchPattern)
+      ])
       
-      let eventIdsWithMatchingVenues: string[] = []
+      // Collect all event IDs matching by direct fields
+      const matchingIds = new Set<string>()
+      nameMatches.data?.forEach(e => matchingIds.add(e.id))
+      sportMatches.data?.forEach(e => matchingIds.add(e.id))
+      descMatches.data?.forEach(e => matchingIds.add(e.id))
+      locationMatches.data?.forEach(e => matchingIds.add(e.id))
+      
+      // Get event IDs that have matching venues
+      const venueIds = venueMatches.data?.map(v => v.id) || []
       if (venueIds.length > 0) {
         const { data: eventVenues } = await supabase
           .from('event_venues')
           .select('event_id')
           .in('venue_id', venueIds)
         
-        eventIdsWithMatchingVenues = eventVenues?.map(ev => ev.event_id) || []
+        eventVenues?.forEach(ev => matchingIds.add(ev.event_id))
       }
       
-      // If we have venue matches, we need to do a combined query
-      // Otherwise just search by name (simple and reliable)
-      if (eventIdsWithMatchingVenues.length > 0) {
-        // Get events matching by name OR by venue
-        // We need to do this in two steps since .or() with ilike has escaping issues
-        const { data: nameMatches } = await supabase
-          .from('events')
-          .select('id')
-          .eq('user_id', user.id)
-          .ilike('name', `%${escapedSearch}%`)
-        
-        const nameMatchIds = nameMatches?.map(e => e.id) || []
-        const allMatchingIds = [...new Set([...nameMatchIds, ...eventIdsWithMatchingVenues])]
-        
-        if (allMatchingIds.length > 0) {
-          query = query.in('id', allMatchingIds)
-        } else {
-          // No matches - return empty by using impossible condition
-          query = query.eq('id', '00000000-0000-0000-0000-000000000000')
-        }
+      // Filter by matching IDs
+      const allMatchingIds = Array.from(matchingIds)
+      if (allMatchingIds.length > 0) {
+        query = query.in('id', allMatchingIds)
       } else {
-        // Simple name search using escaped search term
-        query = query.ilike('name', `%${escapedSearch}%`)
+        // No matches - return empty by using impossible condition
+        query = query.eq('id', '00000000-0000-0000-0000-000000000000')
       }
     }
 
