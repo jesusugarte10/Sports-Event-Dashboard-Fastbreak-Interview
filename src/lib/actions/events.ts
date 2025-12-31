@@ -6,7 +6,7 @@ import { safeAction } from './safe-action'
 import { eventSchema, type EventFormData } from '@/lib/validators/event'
 import { revalidatePath } from 'next/cache'
 
-export async function listEventsAction(search?: string, sport?: string) {
+export async function listEventsAction(search?: string, sport?: string, dateFilter?: string, sortOption?: string) {
   return safeAction(async () => {
     const user = await getUser()
     if (!user) throw new Error('Unauthorized')
@@ -30,14 +30,67 @@ export async function listEventsAction(search?: string, sport?: string) {
         )
       `)
       .eq('user_id', user.id)
-      .order('starts_at', { ascending: true })
 
+    // Search across multiple fields
     if (search) {
-      query = query.ilike('name', `%${search}%`)
+      query = query.or(
+        `name.ilike.%${search}%,sport.ilike.%${search}%,description.ilike.%${search}%,location.ilike.%${search}%`
+      )
     }
 
+    // Filter by sport
     if (sport) {
       query = query.eq('sport', sport)
+    }
+
+    // Date filtering
+    if (dateFilter && dateFilter !== 'all') {
+      const now = new Date()
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000 - 1)
+      
+      switch (dateFilter) {
+        case 'today':
+          query = query
+            .gte('starts_at', startOfDay.toISOString())
+            .lte('starts_at', endOfDay.toISOString())
+          break
+        case 'week': {
+          const dayOfWeek = now.getDay()
+          const startOfWeek = new Date(startOfDay.getTime() - dayOfWeek * 24 * 60 * 60 * 1000)
+          const endOfWeek = new Date(startOfWeek.getTime() + 7 * 24 * 60 * 60 * 1000 - 1)
+          query = query
+            .gte('starts_at', startOfWeek.toISOString())
+            .lte('starts_at', endOfWeek.toISOString())
+          break
+        }
+        case 'month': {
+          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+          const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
+          query = query
+            .gte('starts_at', startOfMonth.toISOString())
+            .lte('starts_at', endOfMonth.toISOString())
+          break
+        }
+        case 'upcoming':
+          query = query.gte('starts_at', now.toISOString())
+          break
+        case 'past':
+          query = query.lt('starts_at', now.toISOString())
+          break
+      }
+    }
+
+    // Sorting
+    const [sortField, sortDirection] = (sortOption || 'date-asc').split('-')
+    const ascending = sortDirection === 'asc'
+    
+    if (sortField === 'date') {
+      query = query.order('starts_at', { ascending })
+    } else if (sortField === 'name') {
+      query = query.order('name', { ascending })
+    } else {
+      query = query.order('starts_at', { ascending: true })
     }
 
     const { data, error } = await query

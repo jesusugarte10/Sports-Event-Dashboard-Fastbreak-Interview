@@ -8,39 +8,76 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Search } from 'lucide-react'
+import { Search, Calendar } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useTransition } from 'react'
+import { useTransition, useState, useEffect, useRef } from 'react'
 
 type DashboardClientProps = {
   initialSearch?: string
   initialSport?: string
+  initialDateFilter?: string
   sports: string[]
 }
 
-export function DashboardClient({ initialSearch, initialSport, sports }: DashboardClientProps) {
+const DATE_FILTERS = [
+  { value: 'all', label: 'All Dates' },
+  { value: 'today', label: 'Today' },
+  { value: 'week', label: 'This Week' },
+  { value: 'month', label: 'This Month' },
+  { value: 'upcoming', label: 'Upcoming' },
+  { value: 'past', label: 'Past Events' },
+]
+
+export function DashboardClient({ 
+  initialSearch, 
+  initialSport, 
+  initialDateFilter,
+  sports 
+}: DashboardClientProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
+  const [searchValue, setSearchValue] = useState(initialSearch || '')
+  const debounceRef = useRef<NodeJS.Timeout | null>(null)
 
-  const handleSearch = (value: string) => {
-    const params = new URLSearchParams(searchParams.toString())
-    if (value) {
-      params.set('search', value)
-    } else {
-      params.delete('search')
+  // Debounced search - only update URL after user stops typing
+  useEffect(() => {
+    // Clear any existing timeout
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current)
     }
-    startTransition(() => {
-      router.push(`/dashboard?${params.toString()}`)
-    })
-  }
 
-  const handleSportChange = (value: string) => {
+    // Set a new timeout to update the URL
+    debounceRef.current = setTimeout(() => {
+      const params = new URLSearchParams(searchParams.toString())
+      if (searchValue) {
+        params.set('search', searchValue)
+      } else {
+        params.delete('search')
+      }
+      
+      // Only push if the search value has actually changed from the URL
+      const currentSearch = searchParams.get('search') || ''
+      if (searchValue !== currentSearch) {
+        startTransition(() => {
+          router.push(`/dashboard?${params.toString()}`)
+        })
+      }
+    }, 300) // 300ms debounce delay
+
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current)
+      }
+    }
+  }, [searchValue, searchParams, router])
+
+  const handleFilterChange = (key: string, value: string, defaultValue: string) => {
     const params = new URLSearchParams(searchParams.toString())
-    if (value && value !== 'all') {
-      params.set('sport', value)
+    if (value && value !== defaultValue) {
+      params.set(key, value)
     } else {
-      params.delete('sport')
+      params.delete(key)
     }
     startTransition(() => {
       router.push(`/dashboard?${params.toString()}`)
@@ -48,26 +85,51 @@ export function DashboardClient({ initialSearch, initialSport, sports }: Dashboa
   }
 
   return (
-    <div className="flex gap-4 flex-col sm:flex-row">
-      <div className="relative flex-1">
+    <div className="flex gap-3 flex-col sm:flex-row sm:flex-wrap sm:items-center">
+      {/* Search */}
+      <div className="relative flex-1 min-w-[200px]">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
           placeholder="Search events..."
-          defaultValue={initialSearch}
-          onChange={(e) => handleSearch(e.target.value)}
+          value={searchValue}
+          onChange={(e) => setSearchValue(e.target.value)}
           className="pl-9"
-          disabled={isPending}
         />
       </div>
-      <Select defaultValue={initialSport || 'all'} onValueChange={handleSportChange} disabled={isPending}>
-        <SelectTrigger className="w-full sm:w-[180px]">
-          <SelectValue placeholder="Filter by sport" />
+
+      {/* Sport Filter */}
+      <Select 
+        defaultValue={initialSport || 'all'} 
+        onValueChange={(v) => handleFilterChange('sport', v, 'all')} 
+        disabled={isPending}
+      >
+        <SelectTrigger className="w-full sm:w-[140px]">
+          <SelectValue placeholder="Sport" />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All Sports</SelectItem>
           {sports.map((sport) => (
             <SelectItem key={sport} value={sport}>
               {sport}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      {/* Date Filter */}
+      <Select 
+        defaultValue={initialDateFilter || 'all'} 
+        onValueChange={(v) => handleFilterChange('date', v, 'all')} 
+        disabled={isPending}
+      >
+        <SelectTrigger className="w-full sm:w-[140px]">
+          <Calendar className="h-4 w-4 mr-2 text-muted-foreground shrink-0" />
+          <SelectValue placeholder="Date" />
+        </SelectTrigger>
+        <SelectContent>
+          {DATE_FILTERS.map((filter) => (
+            <SelectItem key={filter.value} value={filter.value}>
+              {filter.label}
             </SelectItem>
           ))}
         </SelectContent>
