@@ -38,9 +38,16 @@ def driver():
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1920,1080")
     
+    # Use system Chrome binary if available (e.g., in CI environments)
+    chrome_bin = os.getenv("CHROME_BIN")
+    if chrome_bin and os.path.isfile(chrome_bin):
+        options.binary_location = chrome_bin
+    
     # Use system chromedriver if available (e.g., in CI environments)
     driver_path = os.getenv("CHROMEDRIVER_PATH")
-    if not driver_path or not os.path.isfile(driver_path):
+    is_system_driver = driver_path and os.path.isfile(driver_path)
+    
+    if not is_system_driver:
         # Fallback to webdriver-manager for local development
         driver_path = ChromeDriverManager().install()
     
@@ -64,9 +71,14 @@ def driver():
                             driver_path = potential_path
                             break
     
-    # Make sure the driver is executable
-    if os.path.isfile(driver_path):
-        os.chmod(driver_path, 0o755)
+    # Make sure the driver is executable (only for webdriver-manager downloads, not system binaries)
+    # System-installed chromedriver should already have correct permissions
+    if not is_system_driver and os.path.isfile(driver_path):
+        try:
+            os.chmod(driver_path, 0o755)
+        except PermissionError:
+            # If we can't chmod, assume it's already executable (e.g., system driver)
+            pass
     
     driver = webdriver.Chrome(
         service=Service(driver_path), options=options
