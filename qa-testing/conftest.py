@@ -113,12 +113,23 @@ def _perform_login(driver, base_url, test_credentials):
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
     
+    # Verify credentials are provided
+    if not test_credentials.get("email") or not test_credentials.get("password"):
+        raise Exception("TEST_EMAIL and TEST_PASSWORD must be set in environment variables or GitHub Secrets")
+    
+    print(f"Attempting login to {base_url}/login with email: {test_credentials['email']}")
+    
     driver.get(f"{base_url}/login")
     
     # Wait for login page to load
-    WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.NAME, "email"))
-    )
+    try:
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.NAME, "email"))
+        )
+    except Exception as e:
+        current_url = driver.current_url
+        page_source_preview = driver.page_source[:1000] if driver.page_source else "No page source"
+        raise Exception(f"Login page did not load. URL: {current_url}. Page preview: {page_source_preview[:200]}") from e
     
     # Fill in email
     email_input = driver.find_element(By.NAME, "email")
@@ -138,16 +149,57 @@ def _perform_login(driver, base_url, test_credentials):
     )
     sign_in_button.click()
     
-    # Wait for redirect to dashboard
-    WebDriverWait(driver, 15).until(
-        EC.url_contains("/dashboard")
-    )
+    # Wait for redirect to dashboard with better error handling
+    try:
+        WebDriverWait(driver, 25).until(
+            EC.url_contains("/dashboard")
+        )
+    except Exception as e:
+        # Capture page source and current URL for debugging
+        current_url = driver.current_url
+        page_source = driver.page_source[:1000] if driver.page_source else "No page source"
+        error_msg = f"Login failed - did not redirect to dashboard. Current URL: {current_url}"
+        
+        # Check if there's an error message on the page
+        try:
+            # Look for toast messages or error text
+            error_elements = driver.find_elements(By.XPATH, "//*[contains(@class, 'error') or contains(@class, 'destructive') or contains(@role, 'alert')]")
+            if error_elements:
+                error_texts = [el.text for el in error_elements if el.text]
+                if error_texts:
+                    error_msg += f" Error messages on page: {', '.join(error_texts)}"
+            
+            # Also check for common error patterns in page source
+            if "Invalid" in page_source or "error" in page_source.lower():
+                # Try to extract error message
+                import re
+                error_patterns = [
+                    r'Invalid[^<]*',
+                    r'error[^<]*',
+                    r'Failed[^<]*'
+                ]
+                for pattern in error_patterns:
+                    matches = re.findall(pattern, page_source, re.IGNORECASE)
+                    if matches:
+                        error_msg += f" Found error text: {matches[0][:100]}"
+                        break
+        except Exception as parse_error:
+            error_msg += f" (Could not parse error messages: {parse_error})"
+        
+        error_msg += f" Page preview: {page_source[:300]}"
+        raise Exception(error_msg) from e
     
     # Verify we're on the dashboard
-    WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'Events Dashboard') or contains(text(), 'Dashboard')]"))
-    )
+    try:
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'Events Dashboard')]"))
+        )
+    except Exception as e:
+        current_url = driver.current_url
+        page_source_preview = driver.page_source[:500] if driver.page_source else "No page source"
+        raise Exception(f"Dashboard verification failed. URL: {current_url}. Page preview: {page_source_preview[:200]}") from e
     
+    print("✓ Login successful - on dashboard")
     time.sleep(1)  # Brief pause for page to fully load
 
 
