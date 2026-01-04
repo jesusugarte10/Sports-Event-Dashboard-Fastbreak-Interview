@@ -53,6 +53,40 @@ def test_app_is_running(driver, base_url):
     assert len(body_text) > 0, "Page appears to be empty"
 
 
+def test_login_credentials_work(driver, base_url, test_credentials):
+    """Quick test to verify login credentials are valid before running full test suite"""
+    import time
+    
+    print(f"\n🔐 Testing login with email: {test_credentials['email']}")
+    
+    # Verify credentials are set
+    if not test_credentials.get("email") or not test_credentials.get("password"):
+        pytest.skip("TEST_EMAIL and TEST_PASSWORD not set - skipping login test")
+    
+    driver.get(f"{base_url}/login")
+    
+    # Wait for login page
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.NAME, "email"))
+    )
+    
+    # Fill credentials
+    driver.find_element(By.NAME, "email").send_keys(test_credentials["email"])
+    driver.find_element(By.NAME, "password").send_keys(test_credentials["password"])
+    driver.find_element(By.XPATH, "//button[contains(text(), 'Sign In')]").click()
+    
+    # Wait for redirect
+    WebDriverWait(driver, 20).until(
+        EC.url_contains("/dashboard")
+    )
+    
+    # Verify we're on dashboard
+    assert "/dashboard" in driver.current_url, f"Expected /dashboard, got {driver.current_url}"
+    assert "Events Dashboard" in driver.page_source, "Dashboard page did not load correctly"
+    
+    print("✅ Login credentials are valid!")
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])
 
