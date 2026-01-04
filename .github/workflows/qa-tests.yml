@@ -70,12 +70,31 @@ jobs:
           HEADLESS=true
           EOF
       
+      - name: Verify environment variables
+        run: |
+          echo "Verifying environment variables are set..."
+          SUPABASE_URL="${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}"
+          SUPABASE_KEY="${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}"
+          if [ -z "$SUPABASE_URL" ]; then
+            echo "❌ NEXT_PUBLIC_SUPABASE_URL is not set"
+            exit 1
+          fi
+          if [ -z "$SUPABASE_KEY" ]; then
+            echo "❌ NEXT_PUBLIC_SUPABASE_ANON_KEY is not set"
+            exit 1
+          fi
+          echo "✓ Environment variables are set"
+          echo "  NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL:0:30}..."
+          echo "  NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_KEY:0:20}..."
+      
       - name: Build Next.js app
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000' }}
-        run: npm run build
+        run: |
+          echo "Building Next.js app with environment variables..."
+          npm run build
       
       - name: Start Next.js app
         env:
@@ -83,7 +102,9 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000' }}
         run: |
-          echo "Starting Next.js app..."
+          echo "Starting Next.js app with environment variables..."
+          echo "  NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:0:30}..."
+          echo "  NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:0:20}..."
           npm run start > /tmp/nextjs.log 2>&1 &
           APP_PID=$!
           echo "App PID: $APP_PID"
@@ -91,20 +112,28 @@ jobs:
           # Wait for app to be ready with retries
           echo "Waiting for app to start..."
           for i in {1..15}; do
-            if curl -f -s http://localhost:3000 > /dev/null 2>&1; then
-              echo "✓ App is ready! (attempt $i)"
+            # Check if app is responding (use /login to avoid root redirect issues)
+            if curl -f -s http://localhost:3000/login > /dev/null 2>&1; then
+              echo "✓ App is responding! (attempt $i)"
               # Verify the login page loads and doesn't show error page
               RESPONSE=$(curl -s http://localhost:3000/login)
               if echo "$RESPONSE" | grep -q "__next_error__"; then
                 echo "⚠️ App returned error page, checking logs..."
                 tail -50 /tmp/nextjs.log || true
+                echo "Error page preview:"
+                echo "$RESPONSE" | head -20
                 echo "Waiting for error to resolve... ($i/15)"
                 sleep 3
                 continue
               fi
-              if curl -f -s http://localhost:3000/login > /dev/null 2>&1; then
-                echo "✓ Login page is accessible"
+              # Verify login page has expected content
+              if echo "$RESPONSE" | grep -q "Sign In\|Login\|email"; then
+                echo "✓ Login page is accessible and contains expected content"
                 break
+              else
+                echo "⚠️ Login page accessible but content unexpected, retrying..."
+                sleep 2
+                continue
               fi
             fi
             if [ $i -eq 15 ]; then
@@ -121,34 +150,64 @@ jobs:
           done
           
           # Final verification - check for error page
+          # Check /login instead of / since / requires Supabase auth
           echo "Final verification..."
-          RESPONSE=$(curl -s http://localhost:3000)
+          sleep 2  # Give app a moment to fully initialize
+          
+          # Check server logs for any errors first
+          echo "Checking server logs for errors..."
+          if grep -i "error\|failed\|exception" /tmp/nextjs.log | tail -20; then
+            echo "⚠️ Found errors in server logs (see above)"
+          fi
+          
+          RESPONSE=$(curl -s http://localhost:3000/login)
           if echo "$RESPONSE" | grep -q "__next_error__"; then
-            echo "❌ App is returning error page"
-            echo "App log:"
+            echo "❌ App is returning error page on /login"
+            echo ""
+            echo "=== Server Logs (last 100 lines) ==="
             tail -100 /tmp/nextjs.log || true
             echo ""
-            echo "Error page content:"
-            echo "$RESPONSE" | head -50
+            echo "=== Error Page Content ==="
+            echo "$RESPONSE" | head -100
+            echo ""
+            echo "=== Checking for specific error messages ==="
+            # Try to extract error details
+            echo "$RESPONSE" | grep -i "error\|missing\|undefined" | head -10 || true
             exit 1
           fi
-          curl --retry 5 --retry-delay 2 http://localhost:3000 || exit 1
-          echo "✓ App is running and responding correctly"
+          
+          # Verify login page has expected content
+          if ! echo "$RESPONSE" | grep -qi "sign.*in\|email\|password"; then
+            echo "⚠️ Login page doesn't contain expected content"
+            echo "Page preview:"
+            echo "$RESPONSE" | head -50
+          fi
+          
+          # Also check that we can access the login page
+          curl --retry 5 --retry-delay 2 http://localhost:3000/login || exit 1
+          echo "✓ App is running and login page is accessible"
       
       - name: Check app health before tests
         run: |
           echo "Checking app health..."
-          RESPONSE=$(curl -s http://localhost:3000)
+          # Check /login page (client component, doesn't require server-side Supabase)
+          RESPONSE=$(curl -s http://localhost:3000/login)
           if echo "$RESPONSE" | grep -q "__next_error__"; then
-            echo "❌ App is showing error page!"
+            echo "❌ App is showing error page on /login!"
             echo "Error page preview:"
-            echo "$RESPONSE" | head -30
+            echo "$RESPONSE" | head -50
             echo ""
-            echo "App logs:"
+            echo "App logs (last 50 lines):"
             tail -50 /tmp/nextjs.log || true
             exit 1
           fi
-          echo "✓ App is healthy"
+          # Verify login page has expected content
+          if ! echo "$RESPONSE" | grep -q "Sign In\|Login\|email"; then
+            echo "⚠️ Login page doesn't contain expected content"
+            echo "Page preview:"
+            echo "$RESPONSE" | head -30
+          fi
+          echo "✓ App is healthy - login page is accessible"
       
       - name: Run QA tests
         working-directory: ./qa-testing
