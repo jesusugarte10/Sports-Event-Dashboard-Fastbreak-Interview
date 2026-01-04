@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:qa": "cd qa-testing && ./run_tests.sh all",
+    "test:qa:setup": "cd qa-testing && ./setup.sh"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

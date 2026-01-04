@@ -38,8 +38,11 @@ def driver():
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1920,1080")
     
-    # Fix for webdriver-manager issue - find the actual chromedriver executable
-    driver_path = ChromeDriverManager().install()
+    # Use system chromedriver if available (e.g., in CI environments)
+    driver_path = os.getenv("CHROMEDRIVER_PATH")
+    if not driver_path or not os.path.isfile(driver_path):
+        # Fallback to webdriver-manager for local development
+        driver_path = ChromeDriverManager().install()
     
     # webdriver-manager sometimes returns the wrong file (e.g., THIRD_PARTY_NOTICES.chromedriver)
     # We need to find the actual chromedriver executable

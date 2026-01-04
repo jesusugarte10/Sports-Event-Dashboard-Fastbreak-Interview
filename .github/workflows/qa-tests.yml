@@ -1,0 +1,96 @@
+name: QA Tests
+
+on:
+  pull_request:
+    # Run on PRs targeting any branch
+  push:
+    # Run on pushes to any branch
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  qa-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser chromium-chromedriver
+          # Verify installations
+          chromium-browser --version
+          chromedriver --version
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install Node.js dependencies
+        run: npm ci
+      
+      - name: Set up QA testing environment
+        working-directory: ./qa-testing
+        run: |
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Create .env file
+        working-directory: ./qa-testing
+        run: |
+          cat > .env << EOF
+          BASE_URL=${{ secrets.TEST_BASE_URL || 'http://localhost:3000' }}
+          TEST_EMAIL=${{ secrets.TEST_EMAIL }}
+          TEST_PASSWORD=${{ secrets.TEST_PASSWORD }}
+          HEADLESS=true
+          EOF
+      
+      - name: Build Next.js app
+        run: npm run build
+      
+      - name: Start Next.js app
+        run: |
+          npm run start &
+          sleep 15 # Wait for app to start
+          # Verify app is running
+          curl --retry 5 --retry-delay 3 http://localhost:3000 || exit 1
+      
+      - name: Run QA tests
+        working-directory: ./qa-testing
+        env:
+          HEADLESS: true
+          CHROME_BIN: /usr/bin/chromium-browser
+          CHROMEDRIVER_PATH: /usr/bin/chromedriver
+        run: |
+          source venv/bin/activate
+          python3 -m pytest -v --html=reports/report.html --self-contained-html
+      
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: qa-testing/reports/report.html
+      
+      - name: Check test results
+        if: failure()
+        run: |
+          echo "❌ Tests failed! Check the test-reports artifact for details."
+          exit 1
+      
+      - name: Test summary
+        if: success()
+        run: |
+          echo "✅ All QA tests passed!"
+

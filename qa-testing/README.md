@@ -222,20 +222,65 @@ pytest -vv -s
 pytest --cov=. --cov-report=html
 ```
 
+## CI/CD Integration (GitHub Actions)
+
+The QA tests are automatically run in GitHub Actions before deployment. The workflow is configured in `.github/workflows/qa-tests.yml`.
+
+### Setup for GitHub Actions:
+
+1. **Add GitHub Secrets** (Settings → Secrets and variables → Actions):
+   - `TEST_EMAIL`: Your test user email
+   - `TEST_PASSWORD`: Your test user password
+   - `TEST_BASE_URL`: (Optional) If testing against a deployed preview URL instead of localhost
+
+2. **The workflow will:**
+   - Run automatically on pull requests to `main`/`master`
+   - Run automatically on pushes to `main`/`master`
+   - Can be manually triggered via "Actions" tab → "QA Tests" → "Run workflow"
+   - Build the Next.js app
+   - Start the app locally
+   - Run all QA tests in headless mode
+   - Upload test reports as artifacts
+   - Fail the workflow if any tests fail (blocking merge/deployment)
+
+3. **View test results:**
+   - Go to the "Actions" tab in GitHub
+   - Click on a workflow run
+   - Download the "test-reports" artifact to view the HTML report
+
+### Local Testing with npm scripts:
+
+You can also run tests locally using npm scripts:
+
+```bash
+# First time setup
+npm run test:qa:setup
+
+# Run all tests
+npm run test:qa
+```
+
 ## Troubleshooting
 
 ### ChromeDriver issues:
-- ChromeDriver is automatically downloaded by webdriver-manager
-- Make sure you have Chrome browser installed
+- ChromeDriver is automatically downloaded by webdriver-manager (local)
+- In CI, system ChromeDriver is used
+- Make sure you have Chrome browser installed locally
 - If issues persist, try: `pip install --upgrade webdriver-manager`
 
 ### Authentication failures:
 - Verify test user exists in Supabase
-- Check credentials in `.env` file
+- Check credentials in `.env` file (local) or GitHub Secrets (CI)
 - Ensure test user is confirmed/verified in Supabase
 
 ### Timeout errors:
 - Increase wait times in test files if needed
 - Check that the app is running on the correct port
 - Verify network connectivity
+
+### CI/CD failures:
+- Check the GitHub Actions logs for detailed error messages
+- Verify all required secrets are set in GitHub
+- Ensure the app builds successfully before tests run
+- Check that the app starts correctly (wait time may need adjustment)
 
