@@ -390,14 +390,40 @@ class TestNavigation:
         # Step 1: Go to dashboard
         print("  → Navigating to dashboard...")
         driver.get(f"{base_url}/dashboard")
-        time.sleep(1)  # Visual pause
+        
+        # Wait for dashboard to load - check for the "Events Dashboard" heading
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.XPATH, "//h1[contains(text(), 'Events Dashboard')]"))
+        )
+        time.sleep(1)  # Brief pause for any animations
         
         # Step 2: Check for navigation elements
         print("  → Checking navigation elements...")
         
-        # Check for "New Event" button
-        new_event_btn = driver.find_elements(By.XPATH, "//button[contains(text(), 'New Event')] | //a[contains(text(), 'New Event')]")
-        assert len(new_event_btn) > 0, "New Event button not found"
+        # Check for "New Event" button - try multiple strategies to find it
+        # The button uses Button asChild with Link, so it renders as an <a> tag
+        # We need to handle cases where the text might be split by the Plus icon
+        # Wait for the button to be present and visible
+        try:
+            new_event_btn = WebDriverWait(driver, 10).until(
+                EC.presence_of_all_elements_located((
+                    By.XPATH, 
+                    "//a[contains(., 'New Event') and @href='/events/new'] | "
+                    "//a[@href='/events/new' and contains(., 'Event')] | "
+                    "//button[contains(., 'New Event')]"
+                ))
+            )
+        except:
+            # Fallback: try finding by href only
+            new_event_btn = driver.find_elements(By.XPATH, "//a[@href='/events/new']")
+            if len(new_event_btn) == 0:
+                # Last resort: find any link or button with "New Event" text
+                new_event_btn = driver.find_elements(
+                    By.XPATH, 
+                    "//a[contains(., 'New Event')] | //button[contains(., 'New Event')]"
+                )
+        
+        assert len(new_event_btn) > 0, "New Event button not found. Checked for links/buttons with 'New Event' text or href='/events/new'"
         print("  ✓ New Event button found")
         
         # Check for search input
