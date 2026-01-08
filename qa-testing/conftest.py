@@ -3,6 +3,9 @@ Shared pytest fixtures for all test files
 """
 import pytest
 import os
+import socket
+import urllib.request
+import urllib.error
 from pathlib import Path
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -96,6 +99,76 @@ def driver():
 def base_url():
     """Base URL for the application - session scoped for reuse"""
     return os.getenv("BASE_URL", "http://localhost:3000")
+
+
+def _check_app_running(base_url, timeout=5):
+    """
+    Check if the application is running and accessible.
+    Returns True if accessible, False otherwise.
+    """
+    try:
+        # Parse URL
+        if base_url.startswith("http://"):
+            host = base_url.replace("http://", "").split("/")[0].split(":")[0]
+            port = int(base_url.split(":")[-1].split("/")[0]) if ":" in base_url.replace("http://", "") else 80
+        elif base_url.startswith("https://"):
+            host = base_url.replace("https://", "").split("/")[0].split(":")[0]
+            port = int(base_url.split(":")[-1].split("/")[0]) if ":" in base_url.replace("https://", "") else 443
+        else:
+            # Assume localhost:3000 if no protocol
+            host = base_url.split(":")[0] if ":" in base_url else "localhost"
+            port = int(base_url.split(":")[-1].split("/")[0]) if ":" in base_url else 3000
+        
+        # Try to connect via socket first (faster)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        result = sock.connect_ex((host, port))
+        sock.close()
+        
+        if result == 0:
+            # Socket connection successful, try HTTP request
+            try:
+                req = urllib.request.Request(base_url)
+                req.add_header('User-Agent', 'pytest-selenium-check')
+                with urllib.request.urlopen(req, timeout=timeout) as response:
+                    return response.status in [200, 301, 302, 303, 307, 308]
+            except (urllib.error.URLError, urllib.error.HTTPError, socket.timeout):
+                # Socket works but HTTP doesn't - might be a different service
+                # Still return True since we can connect
+                return True
+        
+        return False
+    except Exception as e:
+        print(f"Warning: Could not check if app is running: {e}")
+        return False
+
+
+@pytest.fixture(scope="session", autouse=True)
+def verify_app_running(base_url):
+    """
+    Automatically verify the app is running before any tests start.
+    This fixture runs automatically for all tests (autouse=True).
+    """
+    print(f"\n🔍 Checking if application is running at {base_url}...")
+    
+    if not _check_app_running(base_url):
+        error_msg = f"""
+❌ APPLICATION NOT RUNNING
+
+The application is not accessible at {base_url}
+
+To fix this:
+1. Start the application: npm run dev
+2. Wait for it to be ready (usually takes a few seconds)
+3. Verify it's accessible: curl {base_url}
+4. Then run the tests again
+
+If your app runs on a different URL, set BASE_URL in your .env file:
+   BASE_URL=http://your-app-url:port
+"""
+        pytest.fail(error_msg)
+    
+    print(f"✅ Application is running at {base_url}\n")
 
 
 @pytest.fixture(scope="session")
