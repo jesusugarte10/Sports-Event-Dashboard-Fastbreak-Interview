@@ -312,6 +312,26 @@ def _perform_login(driver, base_url, test_credentials):
     time.sleep(1)  # Brief pause for page to fully load
 
 
+def ui_login(driver, base_url, test_credentials=None):
+    """
+    Public helper function to perform UI login.
+    Can be called from tests when re-authentication is needed.
+    
+    Args:
+        driver: Selenium WebDriver instance
+        base_url: Base URL of the application
+        test_credentials: Optional dict with 'email' and 'password'. 
+                          If None, will use environment variables.
+    """
+    if test_credentials is None:
+        test_credentials = {
+            "email": os.getenv("TEST_EMAIL", "test@example.com"),
+            "password": os.getenv("TEST_PASSWORD", "testpassword123"),
+        }
+    
+    _perform_login(driver, base_url, test_credentials)
+
+
 @pytest.fixture(scope="session")
 def authenticated_driver(driver, base_url, test_credentials):
     """
@@ -323,32 +343,52 @@ def authenticated_driver(driver, base_url, test_credentials):
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
     
+    # Always ensure we're logged in at the start of the session
+    print("\n🔐 Ensuring authentication for test session...")
+    
     # Check if we're already logged in by checking current URL and page content
     def is_authenticated():
         try:
             driver.get(f"{base_url}/dashboard")
-            time.sleep(1)
+            time.sleep(2)  # Give page time to load and check for redirects
             current_url = driver.current_url
-            if "/dashboard" in current_url and "/login" not in current_url:
-                # Check if we're actually on dashboard (not redirected to login)
-                if "Events Dashboard" in driver.page_source or "Dashboard" in driver.page_source:
-                    return True
-        except:
-            pass
-        return False
+            
+            # If redirected to login, we're not authenticated
+            if "/login" in current_url:
+                return False
+            
+            # Check if we're actually on dashboard (not redirected to login)
+            if "/dashboard" in current_url:
+                # Verify dashboard content is present
+                page_text = driver.page_source.lower()
+                if "events dashboard" in page_text or "dashboard" in page_text:
+                    # Double-check: look for dashboard-specific elements
+                    if driver.find_elements(By.XPATH, "//h1[contains(., 'Events Dashboard')] | //*[contains(., 'Events Dashboard')]"):
+                        return True
+            return False
+        except Exception as e:
+            print(f"⚠️ Error checking authentication status: {e}")
+            return False
     
+    # Try to check authentication status
     if is_authenticated():
         print("✓ Already authenticated - reusing session")
         return driver
     
-    # Navigate to login page
-    print("\n🔐 Logging in for test session...")
+    # Not authenticated - perform login
+    print("🔐 Logging in for test session...")
     
     try:
         _perform_login(driver, base_url, test_credentials)
+        
+        # Verify login was successful
+        if not is_authenticated():
+            raise Exception("Login completed but authentication verification failed")
+        
         print("✓ Successfully authenticated - session ready for all tests")
         return driver
     except Exception as e:
+        save_debug_artifacts(driver, "authentication-failure")
         pytest.fail(f"Could not authenticate: {str(e)}")
 
 

@@ -383,7 +383,7 @@ class TestEventDeletion:
 class TestNavigation:
     """Test navigation and UI elements"""
 
-    def test_dashboard_navigation(self, authenticated_driver, base_url):
+    def test_dashboard_navigation(self, authenticated_driver, base_url, test_credentials):
         """Test navigation elements on dashboard"""
         print("\n🧭 Starting: Dashboard Navigation Test")
         driver = authenticated_driver
@@ -391,6 +391,15 @@ class TestNavigation:
         # Step 1: Go to dashboard
         print("  → Navigating to dashboard...")
         driver.get(f"{base_url}/dashboard")
+        time.sleep(1)
+        
+        # Defensive: if redirected to login, re-authenticate using helper from conftest
+        if "/login" in driver.current_url or "sign in" in driver.page_source.lower() or "welcome back" in driver.page_source.lower():
+            from conftest import ui_login
+            print("  → Redirected to /login; re-authenticating...")
+            ui_login(driver, base_url, test_credentials)
+            driver.get(f"{base_url}/dashboard")
+            time.sleep(1)
         
         # More robust dashboard loaded check: accept multiple indicators and give more time
         def dashboard_is_ready(d):
