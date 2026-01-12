@@ -3,13 +3,52 @@ Shared pytest fixtures for all test files
 """
 import pytest
 import os
+import socket
+import urllib.request
+import urllib.error
 from pathlib import Path
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
+from selenium.common.exceptions import TimeoutException
 from webdriver_manager.chrome import ChromeDriverManager
 from dotenv import load_dotenv
 import time
+
+
+def save_debug_artifacts(driver, prefix="test-failure"):
+    """
+    Save debugging artifacts (screenshot and page source) when a test fails.
+    Useful for debugging CI failures and timing issues.
+    """
+    try:
+        ts = int(time.time())
+        # Use reports directory if it exists, otherwise use /tmp
+        reports_dir = Path(__file__).parent / "reports"
+        if not reports_dir.exists():
+            reports_dir.mkdir(parents=True, exist_ok=True)
+        
+        screenshot_path = reports_dir / f"{prefix}-{ts}.png"
+        html_path = reports_dir / f"{prefix}-{ts}.html"
+        
+        try:
+            driver.save_screenshot(str(screenshot_path))
+            print(f"📸 Screenshot saved: {screenshot_path}")
+        except Exception as e:
+            print(f"⚠️ Could not save screenshot: {e}")
+        
+        try:
+            with open(html_path, "w", encoding="utf-8") as f:
+                f.write(driver.page_source)
+            print(f"📄 Page source saved: {html_path}")
+        except Exception as e:
+            print(f"⚠️ Could not save page source: {e}")
+        
+        print(f"🔍 Debug artifacts saved with prefix: {prefix}")
+        print(f"   Current URL: {driver.current_url}")
+        print(f"   Page title: {driver.title}")
+    except Exception as e:
+        print(f"⚠️ Error saving debug artifacts: {e}")
 
 # Load environment variables from .env file
 env_path = Path(__file__).parent / '.env'
@@ -96,6 +135,76 @@ def driver():
 def base_url():
     """Base URL for the application - session scoped for reuse"""
     return os.getenv("BASE_URL", "http://localhost:3000")
+
+
+def _check_app_running(base_url, timeout=5):
+    """
+    Check if the application is running and accessible.
+    Returns True if accessible, False otherwise.
+    """
+    try:
+        # Parse URL
+        if base_url.startswith("http://"):
+            host = base_url.replace("http://", "").split("/")[0].split(":")[0]
+            port = int(base_url.split(":")[-1].split("/")[0]) if ":" in base_url.replace("http://", "") else 80
+        elif base_url.startswith("https://"):
+            host = base_url.replace("https://", "").split("/")[0].split(":")[0]
+            port = int(base_url.split(":")[-1].split("/")[0]) if ":" in base_url.replace("https://", "") else 443
+        else:
+            # Assume localhost:3000 if no protocol
+            host = base_url.split(":")[0] if ":" in base_url else "localhost"
+            port = int(base_url.split(":")[-1].split("/")[0]) if ":" in base_url else 3000
+        
+        # Try to connect via socket first (faster)
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        result = sock.connect_ex((host, port))
+        sock.close()
+        
+        if result == 0:
+            # Socket connection successful, try HTTP request
+            try:
+                req = urllib.request.Request(base_url)
+                req.add_header('User-Agent', 'pytest-selenium-check')
+                with urllib.request.urlopen(req, timeout=timeout) as response:
+                    return response.status in [200, 301, 302, 303, 307, 308]
+            except (urllib.error.URLError, urllib.error.HTTPError, socket.timeout):
+                # Socket works but HTTP doesn't - might be a different service
+                # Still return True since we can connect
+                return True
+        
+        return False
+    except Exception as e:
+        print(f"Warning: Could not check if app is running: {e}")
+        return False
+
+
+@pytest.fixture(scope="session", autouse=True)
+def verify_app_running(base_url):
+    """
+    Automatically verify the app is running before any tests start.
+    This fixture runs automatically for all tests (autouse=True).
+    """
+    print(f"\n🔍 Checking if application is running at {base_url}...")
+    
+    if not _check_app_running(base_url):
+        error_msg = f"""
+❌ APPLICATION NOT RUNNING
+
+The application is not accessible at {base_url}
+
+To fix this:
+1. Start the application: npm run dev
+2. Wait for it to be ready (usually takes a few seconds)
+3. Verify it's accessible: curl {base_url}
+4. Then run the tests again
+
+If your app runs on a different URL, set BASE_URL in your .env file:
+   BASE_URL=http://your-app-url:port
+"""
+        pytest.fail(error_msg)
+    
+    print(f"✅ Application is running at {base_url}\n")
 
 
 @pytest.fixture(scope="session")
@@ -203,6 +312,26 @@ def _perform_login(driver, base_url, test_credentials):
     time.sleep(1)  # Brief pause for page to fully load
 
 
+def ui_login(driver, base_url, test_credentials=None):
+    """
+    Public helper function to perform UI login.
+    Can be called from tests when re-authentication is needed.
+    
+    Args:
+        driver: Selenium WebDriver instance
+        base_url: Base URL of the application
+        test_credentials: Optional dict with 'email' and 'password'. 
+                          If None, will use environment variables.
+    """
+    if test_credentials is None:
+        test_credentials = {
+            "email": os.getenv("TEST_EMAIL", "test@example.com"),
+            "password": os.getenv("TEST_PASSWORD", "testpassword123"),
+        }
+    
+    _perform_login(driver, base_url, test_credentials)
+
+
 @pytest.fixture(scope="session")
 def authenticated_driver(driver, base_url, test_credentials):
     """
@@ -214,32 +343,52 @@ def authenticated_driver(driver, base_url, test_credentials):
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
     
+    # Always ensure we're logged in at the start of the session
+    print("\n🔐 Ensuring authentication for test session...")
+    
     # Check if we're already logged in by checking current URL and page content
     def is_authenticated():
         try:
             driver.get(f"{base_url}/dashboard")
-            time.sleep(1)
+            time.sleep(2)  # Give page time to load and check for redirects
             current_url = driver.current_url
-            if "/dashboard" in current_url and "/login" not in current_url:
-                # Check if we're actually on dashboard (not redirected to login)
-                if "Events Dashboard" in driver.page_source or "Dashboard" in driver.page_source:
-                    return True
-        except:
-            pass
-        return False
+            
+            # If redirected to login, we're not authenticated
+            if "/login" in current_url:
+                return False
+            
+            # Check if we're actually on dashboard (not redirected to login)
+            if "/dashboard" in current_url:
+                # Verify dashboard content is present
+                page_text = driver.page_source.lower()
+                if "events dashboard" in page_text or "dashboard" in page_text:
+                    # Double-check: look for dashboard-specific elements
+                    if driver.find_elements(By.XPATH, "//h1[contains(., 'Events Dashboard')] | //*[contains(., 'Events Dashboard')]"):
+                        return True
+            return False
+        except Exception as e:
+            print(f"⚠️ Error checking authentication status: {e}")
+            return False
     
+    # Try to check authentication status
     if is_authenticated():
         print("✓ Already authenticated - reusing session")
         return driver
     
-    # Navigate to login page
-    print("\n🔐 Logging in for test session...")
+    # Not authenticated - perform login
+    print("🔐 Logging in for test session...")
     
     try:
         _perform_login(driver, base_url, test_credentials)
+        
+        # Verify login was successful
+        if not is_authenticated():
+            raise Exception("Login completed but authentication verification failed")
+        
         print("✓ Successfully authenticated - session ready for all tests")
         return driver
     except Exception as e:
+        save_debug_artifacts(driver, "authentication-failure")
         pytest.fail(f"Could not authenticate: {str(e)}")
 
 

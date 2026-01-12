@@ -42,17 +42,16 @@ pytest test_dashboard.py -v
 - ✅ Event form validation works
 - ✅ Venue multi-input works
 
-### 4. Verify AI Features Tests
+### 4. Verify Comprehensive Tests
 
 ```bash
-pytest test_ai_features.py -v
+pytest test_comprehensive.py -v
 ```
 
 **Expected Results:**
-- ✅ AI Event Creator button is present
-- ✅ AI Event Creator dialog opens
-- ✅ AI suggestions button appears in form
-- ✅ AI generate button appears in form
+- ✅ Comprehensive test suite runs successfully
+- ✅ All event operations (create, edit, delete, clone) work correctly
+- ✅ Navigation and UI elements function properly
 
 ### 5. Verify Integration Tests
 
@@ -107,7 +106,7 @@ Current test coverage:
 - ✅ Dashboard functionality (search, filter)
 - ✅ Event CRUD operations
 - ✅ Form validation
-- ✅ AI features (chatbot, suggestions, generation)
+- ✅ Event cloning functionality
 - ✅ Integration workflows
 - ✅ Responsive design
 

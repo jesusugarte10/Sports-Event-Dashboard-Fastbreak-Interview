@@ -46,8 +46,15 @@ class TestDashboard:
         assert search_input.is_displayed()
         
         # Check for New Event button or link
+        # The button uses Button asChild with Link, so it renders as an <a> tag
+        # Use multiple strategies to find it reliably
         new_event = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.XPATH, "//*[contains(text(), 'New Event')]"))
+            EC.presence_of_element_located((
+                By.XPATH, 
+                "//a[contains(., 'New Event') and @href='/events/new'] | "
+                "//a[@href='/events/new' and contains(., 'Event')] | "
+                "//*[contains(., 'New Event')]"
+            ))
         )
         assert new_event.is_displayed()
 

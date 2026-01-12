@@ -43,8 +43,6 @@ if [ "$1" == "auth" ]; then
     python3 -m pytest test_auth.py -v -s
 elif [ "$1" == "dashboard" ]; then
     python3 -m pytest test_dashboard.py -v -s
-elif [ "$1" == "ai" ]; then
-    python3 -m pytest test_ai_features.py -v -s
 elif [ "$1" == "integration" ]; then
     python3 -m pytest test_integration.py -v -s
 elif [ "$1" == "comprehensive" ]; then
@@ -54,7 +52,7 @@ elif [ "$1" == "all" ] || [ -z "$1" ]; then
     echo ""
     echo "📊 Test report generated: reports/report.html"
 else
-    echo "Usage: ./run_tests.sh [auth|dashboard|ai|integration|comprehensive|all]"
+    echo "Usage: ./run_tests.sh [auth|dashboard|integration|comprehensive|all]"
     echo ""
     echo "To run with visible browser (default):"
     echo "  ./run_tests.sh [test_suite]"

@@ -7,7 +7,6 @@ import { Plus, Calendar } from 'lucide-react'
 import Link from 'next/link'
 import { Suspense } from 'react'
 import { DashboardClient } from './DashboardClient'
-import { AIEventCreator } from '@/components/AIEventCreator'
 
 type DashboardPageProps = {
   searchParams: Promise<{
@@ -77,15 +76,12 @@ async function EventList({ search, sport, date, sort }: { search?: string; sport
               ? 'Try adjusting your search or filters'
               : 'Get started by creating your first sports event'}
           </p>
-          <div className="flex gap-3">
-            <AIEventCreator />
             <Button asChild variant="outline">
               <Link href="/events/new">
                 <Plus className="mr-2 h-4 w-4" />
                 Create Event
               </Link>
             </Button>
-          </div>
         </CardContent>
       </Card>
     )
@@ -129,7 +125,6 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           </p>
         </div>
         <div className="flex gap-2 ml-auto">
-          <AIEventCreator />
           <Button asChild>
             <Link href="/events/new">
               <Plus className="mr-2 h-4 w-4" />

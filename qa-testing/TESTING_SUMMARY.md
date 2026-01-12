@@ -27,11 +27,11 @@
    - Form validation
    - Venue multi-input
 
-3. **test_ai_features.py** - AI features
-   - AI Event Creator button
-   - AI Event Creator dialog
-   - AI suggestions in form
-   - AI generate in form
+3. **test_comprehensive.py** - Comprehensive test suite
+   - Complete user journey
+   - Event creation, editing, deletion
+   - Event cloning
+   - Navigation and UI elements
 
 4. **test_integration.py** - End-to-end workflows
    - Complete event lifecycle
@@ -86,12 +86,6 @@ pytest test_auth.py -v
 - [x] Form validation
 - [x] Venue input
 
-### AI Features ✅
-- [x] AI Event Creator button
-- [x] AI chatbot dialog
-- [x] AI suggestions button
-- [x] AI generate button
-
 ### Integration ✅
 - [x] Event creation workflow
 - [x] Search and filter
@@ -122,7 +116,7 @@ pytest test_auth.py -v
 ```bash
 pytest -m auth          # Authentication only
 pytest -m dashboard    # Dashboard only
-pytest -m ai           # AI features only
+pytest -m comprehensive  # Comprehensive test suite
 pytest -m integration  # Integration only
 ```
 
@@ -179,7 +173,7 @@ All test suites are configured and ready to run. The tests will:
 - ✅ Test user interactions
 - ✅ Validate form submissions
 - ✅ Check navigation flows
-- ✅ Test AI features
+- ✅ Test comprehensive features
 - ✅ Verify responsive design
 
 **Note:** Some tests require a test user to be set up in Supabase with credentials in `.env`.

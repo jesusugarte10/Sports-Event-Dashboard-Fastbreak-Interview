@@ -33,7 +33,14 @@ def test_selenium_setup(driver, base_url):
         print("\n✅ Selenium setup is working correctly!")
         
     except Exception as e:
-        print(f"\n❌ Selenium setup test failed: {str(e)}")
+        error_str = str(e)
+        if "ERR_CONNECTION_REFUSED" in error_str or "Connection refused" in error_str:
+            pytest.fail(
+                f"\n❌ Cannot connect to {base_url}\n"
+                "The application is not running. Please start it with: npm run dev\n"
+                "Then wait a few seconds for it to be ready and run the tests again."
+            )
+        print(f"\n❌ Selenium setup test failed: {error_str}")
         print("\nTroubleshooting:")
         print("1. Make sure the app is running: npm run dev")
         print("2. Check that Chrome browser is installed")
@@ -43,14 +50,23 @@ def test_selenium_setup(driver, base_url):
 
 def test_app_is_running(driver, base_url):
     """Test that the application is accessible"""
-    driver.get(base_url)
-    
-    # Should not get a connection error
-    assert "localhost" in driver.current_url or "127.0.0.1" in driver.current_url
-    
-    # Should see some content
-    body_text = driver.find_element(By.TAG_NAME, "body").text
-    assert len(body_text) > 0, "Page appears to be empty"
+    try:
+        driver.get(base_url)
+        
+        # Should not get a connection error
+        assert "localhost" in driver.current_url or "127.0.0.1" in driver.current_url or base_url.replace("http://", "").replace("https://", "").split("/")[0] in driver.current_url
+        
+        # Should see some content
+        body_text = driver.find_element(By.TAG_NAME, "body").text
+        assert len(body_text) > 0, "Page appears to be empty"
+    except Exception as e:
+        error_str = str(e)
+        if "ERR_CONNECTION_REFUSED" in error_str or "Connection refused" in error_str:
+            pytest.fail(
+                f"\n❌ Cannot connect to {base_url}\n"
+                "The application is not running. Please start it with: npm run dev"
+            )
+        raise
 
 
 def test_login_credentials_work(driver, base_url, test_credentials):

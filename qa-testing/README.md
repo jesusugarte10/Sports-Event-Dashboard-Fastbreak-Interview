@@ -65,7 +65,6 @@ cd qa-testing
 ./run_tests.sh auth
 ./run_tests.sh dashboard
 ./run_tests.sh comprehensive
-./run_tests.sh ai
 ./run_tests.sh integration
 ```
 
@@ -106,14 +105,14 @@ pytest
 pytest test_auth.py
 pytest test_dashboard.py
 pytest test_integration.py
-pytest test_ai_features.py
+pytest test_comprehensive.py
 ```
 
 ### Run specific test categories:
 ```bash
 pytest -m auth          # Authentication tests only
 pytest -m dashboard    # Dashboard tests only
-pytest -m ai           # AI feature tests only
+pytest -m comprehensive  # Comprehensive test suite
 pytest -m integration  # Integration tests only
 ```
 
@@ -148,14 +147,6 @@ HEADLESS=false pytest -v
 - ✅ Form validation
 - ✅ Venue multi-input
 
-### test_ai_features.py
-- ✅ AI Event Creator button presence
-- ✅ AI Event Creator dialog opens
-- ✅ AI dialog has example prompts
-- ✅ AI input field accepts text
-- ✅ AI send button present
-- ✅ AI processes prompt (clicks example and verifies response)
-
 ### test_integration.py
 - ✅ Complete event lifecycle (create, view, edit, delete)
 - ✅ Search and filter workflow
@@ -167,7 +158,7 @@ HEADLESS=false pytest -v
 - ✅ Create event with all fields (name, sport, date, description, location, venues)
 - ✅ Edit existing event
 - ✅ Delete event
-- ✅ AI event creator button and dialog
+- ✅ Clone event functionality
 - ✅ Dashboard navigation
 - ✅ Sign out functionality
 
